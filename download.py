@@ -3,7 +3,6 @@ import re
 import validators
 import yt_dlp
 import torch
-import gdown
 from urllib.parse import quote
 from helpers import INPUT_DIR, COOKIE_PATH, clear_directory, clear_temp_folder, BASE_DIR
 import yaml
