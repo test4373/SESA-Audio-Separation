@@ -24,7 +24,6 @@ from tqdm import tqdm
 from google.oauth2.credentials import Credentials
 import tempfile
 from urllib.parse import urlparse, quote
-import gdown
 
 import warnings
 warnings.filterwarnings("ignore")
