@@ -7,7 +7,7 @@ from datetime import datetime
 from helpers import update_model_dropdown, handle_file_upload, clear_old_output, save_uploaded_file, update_file_list
 from download import download_callback
 from model import get_model_config, MODEL_CONFIGS
-from processing import process_audio, auto_ensemble_process, ensemble_audio_fn
+from processing import process_audio, auto_ensemble_process, ensemble_audio_fn, refresh_auto_output
 
 # BASE_DIR tanımı (BASE_PATH yerine)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -18,25 +18,14 @@ def create_interface():
     css = """
     /* Genel Tema */
     body {
-        background: url('/content/logo.jpg') no-repeat center center fixed;
+        background: linear-gradient(to bottom, rgba(45, 11, 11, 0.9), rgba(0, 0, 0, 0.8)), url('/content/logo.jpg') no-repeat center center fixed;
         background-size: cover;
-        background-color: #2d0b0b; /* Koyu kırmızı, dublaj stüdyosuna uygun */
         min-height: 100vh;
         margin: 0;
         padding: 1rem;
         font-family: 'Poppins', sans-serif;
-        color: #C0C0C0; /* Metalik gümüş metin, profesyonel görünüm */
-    }
-
-    body::after {
-        content: '';
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background: rgba(45, 11, 11, 0.9); /* Daha koyu kırmızı overlay */
-        z-index: -1;
+        color: #C0C0C0;
+        overflow-x: hidden;
     }
 
     /* Logo Stilleri */
@@ -47,23 +36,41 @@ def create_interface():
         transform: translateX(-50%);
         display: flex;
         align-items: center;
-        z-index: 2000; /* Diğer öğelerden üstte, mutlaka görünür */
+        z-index: 2000;
+        transition: transform 0.3s ease;
     }
 
     .logo-img {
-        width: 120px;
+        width: 150px;
         height: auto;
+        filter: drop-shadow(0 0 10px rgba(255, 64, 64, 0.5));
+        transition: transform 0.3s ease, filter 0.3s ease;
+    }
+
+    .logo-img:hover {
+        transform: scale(1.1);
+        filter: drop-shadow(0 0 15px rgba(255, 64, 64, 0.8));
     }
 
     /* Başlık Stilleri */
     .header-text {
         text-align: center;
-        padding: 80px 20px 20px; /* Logo için alan bırak */
-        color: #ff4040; /* Kırmızı, dublaj temasına uygun */
-        font-size: 2.5rem; /* Daha etkileyici ve büyük başlık */
-        font-weight: 900; /* Daha kalın ve dramatik */
-        text-shadow: 0 0 10px rgba(255, 64, 64, 0.5); /* Kırmızı gölge efekti */
-        z-index: 1500; /* Tablerden üstte, logonun altında */
+        padding: 100px 20px 20px;
+        color: #ff4040;
+        font-size: 3rem;
+        font-weight: 900;
+        text-shadow: 0 0 10px rgba(255, 64, 64, 0.5);
+        z-index: 1500;
+        animation: text-glow 2s infinite;
+    }
+
+    .header-subtitle {
+        text-align: center;
+        color: #C0C0C0;
+        font-size: 1.2rem;
+        font-weight: 300;
+        margin-top: -10px;
+        text-shadow: 0 0 5px rgba(255, 64, 64, 0.3);
     }
 
     /* Metalik kırmızı parlama animasyonu */
@@ -75,40 +82,55 @@ def create_interface():
 
     /* Dublaj temalı stil */
     .dubbing-theme {
-        background: linear-gradient(to bottom, #800000, #2d0b0b); /* Koyu kırmızı gradyan */
+        background: linear-gradient(to bottom, #800000, #2d0b0b);
         border-radius: 15px;
         padding: 1rem;
-        box-shadow: 0 10px 20px rgba(255, 64, 64, 0.3); /* Kırmızı gölge */
+        box-shadow: 0 10px 20px rgba(255, 64, 64, 0.3);
     }
 
-    /* Footer Stilleri (Tablerin Üstünde, Şeffaf) */
-    .footer {
-        text-align: center;
-        padding: 10px;
-        color: #ff4040; /* Kırmızı metin, dublaj temasına uygun */
-        font-size: 14px;
-        margin-top: 20px;
-        position: relative;
-        z-index: 1001; /* Tablerden üstte, logodan düşük */
+    /* Sekmeler İçin Ortak Stiller */
+    .gr-tab {
+        background: rgba(128, 0, 0, 0.5) !important;
+        border-radius: 12px 12px 0 0 !important;
+        margin: 0 5px !important;
+        color: #C0C0C0 !important;
+        border: 1px solid #ff4040 !important;
+        z-index: 1500;
+        transition: background 0.3s ease, color 0.3s ease;
+        padding: 10px 20px !important;
+        font-size: 1.1rem !important;
+    }
+
+    .gr-tab:hover {
+        background: rgba(128, 0, 0, 0.8) !important;
+        color: #ffffff !important;
+    }
+
+    .gr-tab-selected {
+        background: #800000 !important;
+        box-shadow: 0 4px 12px rgba(255, 64, 64, 0.7) !important;
+        color: #ffffff !important;
+        border: 1px solid #ff6b6b !important;
     }
 
     /* Düğme ve Yükleme Alanı Stilleri */
     button {
         transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
-        background: #800000 !important; /* Koyu kırmızı, dublaj temasına uygun */
-        border: 1px solid #ff4040 !important; /* Kırmızı sınır */
-        color: #C0C0C0 !important; /* Metalik gümüş metin */
+        background: #800000 !important;
+        border: 1px solid #ff4040 !important;
+        color: #C0C0C0 !important;
         border-radius: 8px !important;
         padding: 8px 16px !important;
         position: relative;
         overflow: hidden !important;
         font-size: 0.9rem !important;
+        box-shadow: 0 2px 10px rgba(255, 64, 64, 0.3);
     }
 
     button:hover {
         transform: scale(1.05) !important;
-        box-shadow: 0 10px 40px rgba(255, 64, 64, 0.7) !important; /* Daha belirgin kırmızı gölge */
-        background: #ff4040 !important; /* Daha açık kırmızı hover efekti */
+        box-shadow: 0 10px 40px rgba(255, 64, 64, 0.7) !important;
+        background: #ff4040 !important;
     }
 
     button::before {
@@ -120,7 +142,7 @@ def create_interface():
         height: 200%;
         background: linear-gradient(45deg, 
             transparent 20%, 
-            rgba(192, 192, 192, 0.3) 50%, /* Metalik gümüş ton */
+            rgba(192, 192, 192, 0.3) 50%,
             transparent 80%);
         animation: button-shine 3s infinite linear;
     }
@@ -133,23 +155,23 @@ def create_interface():
         max-width: 400px !important;
         height: 40px !important;
         padding: 0 12px !important;
-        border: 1px solid #ff4040 !important; /* Kırmızı sınır */
-        background: rgba(128, 0, 0, 0.5) !important; /* Koyu kırmızı, şeffaf */
+        border: 1px solid #ff4040 !important;
+        background: rgba(128, 0, 0, 0.5) !important;
         border-radius: 8px !important;
         transition: all 0.2s ease !important;
-        color: #C0C0C0 !important; /* Metalik gümüş metin */
+        color: #C0C0C0 !important;
     }
 
     .compact-upload.horizontal:hover {
-        border-color: #ff6b6b !important; /* Daha açık kırmızı */
-        background: rgba(128, 0, 0, 0.7) !important; /* Daha koyu kırmızı hover */
+        border-color: #ff6b6b !important;
+        background: rgba(128, 0, 0, 0.7) !important;
     }
 
     .compact-upload.horizontal .w-full {
         flex: 1 1 auto !important;
         min-width: 120px !important;
         margin: 0 !important;
-        color: #C0C0C0 !important; /* Metalik gümüş */
+        color: #C0C0C0 !important;
     }
 
     .compact-upload.horizontal button {
@@ -158,14 +180,14 @@ def create_interface():
         height: 28px !important;
         min-width: 80px !important;
         border-radius: 4px !important;
-        background: #800000 !important; /* Koyu kırmızı */
-        border: 1px solid #ff4040 !important; /* Kırmızı sınır */
-        color: #C0C0C0 !important; /* Metalik gümüş */
+        background: #800000 !important;
+        border: 1px solid #ff4040 !important;
+        color: #C0C0C0 !important;
     }
 
     .compact-upload.horizontal .text-gray-500 {
         font-size: 0.7em !important;
-        color: rgba(192, 192, 192, 0.6) !important; /* Şeffaf metalik gümüş */
+        color: rgba(192, 192, 192, 0.6) !important;
         white-space: nowrap !important;
         overflow: hidden !important;
         text-overflow: ellipsis !important;
@@ -192,28 +214,11 @@ def create_interface():
         max-width: 140px !important;
     }
 
-    /* Sekmeler İçin Ortak Stiller */
-    .gr-tab {
-        background: rgba(128, 0, 0, 0.5) !important; /* Koyu kırmızı, şeffaf */
-        border-radius: 12px 12px 0 0 !important;
-        margin: 0 5px !important;
-        color: #C0C0C0 !important; /* Metalik gümüş */
-        border: 1px solid #ff4040 !important; /* Kırmızı sınır */
-        z-index: 1500; /* Logo’nun altında, diğer öğelerden üstte */
-    }
-
-    .gr-tab-selected {
-        background: #800000 !important; /* Koyu kırmızı */
-        box-shadow: 0 4px 12px rgba(255, 64, 64, 0.7) !important; /* Daha belirgin kırmızı gölge */
-        color: #ffffff !important; /* Beyaz metin (seçili sekme için kontrast) */
-        border: 1px solid #ff6b6b !important; /* Daha açık kırmızı */
-    }
-
     /* Manuel Ensemble Özel Stilleri */
     .compact-header {
         font-size: 0.95em !important;
         margin: 0.8rem 0 0.5rem 0 !important;
-        color: #C0C0C0 !important; /* Metalik gümüş metin */
+        color: #C0C0C0 !important;
     }
 
     .compact-grid {
@@ -221,22 +226,22 @@ def create_interface():
         max-height: 50vh;
         overflow-y: auto;
         padding: 10px;
-        background: rgba(128, 0, 0, 0.3) !important; /* Koyu kırmızı, şeffaf */
+        background: rgba(128, 0, 0, 0.3) !important;
         border-radius: 12px;
-        border: 1px solid #ff4040 !important; /* Kırmızı sınır */
+        border: 1px solid #ff4040 !important;
     }
 
     .compact-dropdown {
         --padding: 8px 12px !important;
         --radius: 10px !important;
-        border: 1px solid #ff4040 !important; /* Kırmızı sınır */
-        background: rgba(128, 0, 0, 0.5) !important; /* Koyu kırmızı, şeffaf */
-        color: #C0C0C0 !important; /* Metalik gümüş metin */
+        border: 1px solid #ff4040 !important;
+        background: rgba(128, 0, 0, 0.5) !important;
+        color: #C0C0C0 !important;
     }
 
     .tooltip-icon {
         font-size: 1.4em !important;
-        color: #C0C0C0 !important; /* Metalik gümüş */
+        color: #C0C0C0 !important;
         cursor: help;
         margin-left: 0.5rem !important;
     }
@@ -244,11 +249,71 @@ def create_interface():
     .log-box {
         font-family: 'Fira Code', monospace !important;
         font-size: 0.85em !important;
-        background-color: rgba(128, 0, 0, 0.3) !important; /* Koyu kırmızı, şeffaf */
-        border: 1px solid #ff4040 !important; /* Kırmızı sınır */
+        background-color: rgba(128, 0, 0, 0.3) !important;
+        border: 1px solid #ff4040 !important;
         border-radius: 8px;
         padding: 1rem !important;
-        color: #C0C0C0 !important; /* Metalik gümüş metin */
+        color: #C0C0C0 !important;
+    }
+
+    /* Özel İlerleme Barı Stilleri */
+    #custom-progress {
+        margin-top: 10px;
+        padding: 10px;
+        background: rgba(128, 0, 0, 0.3);
+        border-radius: 8px;
+        border: 1px solid #ff4040;
+        box-shadow: 0 2px 10px rgba(255, 64, 64, 0.3);
+    }
+
+    #progress-label {
+        font-size: 1rem;
+        color: #C0C0C0;
+        margin-bottom: 5px;
+    }
+
+    #progress-bar {
+        height: 20px;
+        background: linear-gradient(to right, #6e8efb, #ff4040);
+        border-radius: 5px;
+        transition: width 0.5s ease-in-out;
+        box-shadow: 0 0 10px rgba(110, 142, 251, 0.5);
+    }
+
+    /* Ayarlar Bölümü */
+    .gr-accordion {
+        background: rgba(128, 0, 0, 0.5) !important;
+        border-radius: 10px !important;
+        border: 1px solid #ff4040 !important;
+        margin-bottom: 10px !important;
+    }
+
+    .gr-accordion .gr-box {
+        padding: 10px !important;
+    }
+
+    /* Footer Stilleri */
+    .footer {
+        text-align: center;
+        padding: 20px;
+        color: #ff4040;
+        font-size: 14px;
+        margin-top: 40px;
+        position: relative;
+        z-index: 1001;
+        background: rgba(128, 0, 0, 0.3);
+        border-top: 1px solid #ff4040;
+    }
+
+    .footer a {
+        color: #ff6b6b;
+        text-decoration: none;
+        margin: 0 10px;
+        transition: color 0.3s ease;
+    }
+
+    .footer a:hover {
+        color: #ffffff;
     }
 
     /* Animasyonlar */
@@ -284,15 +349,19 @@ def create_interface():
         }
 
         .logo-container {
-            width: 80px; /* Mobil cihazlarda daha küçük logo */
+            width: 80px;
             top: 1rem;
             left: 50%;
             transform: translateX(-50%);
         }
 
         .header-text {
-            padding: 60px 20px 20px; /* Mobil için daha az boşluk */
-            font-size: 1.8rem; /* Mobil için biraz daha küçük başlık */
+            padding: 60px 20px 20px;
+            font-size: 1.8rem;
+        }
+
+        .header-subtitle {
+            font-size: 1rem;
         }
     }
     """
@@ -303,20 +372,23 @@ def create_interface():
             # Logo (PNG olarak, dublaj temasına uygun)
             logo_html = """
             <div class="logo-container">
-                <img src="/content/gk_logo.png" alt="" class="logo-img">
+                <img src="/content/gk_logo.png" alt="Gecekondu Dubbing Production" class="logo-img">
             </div>
             """
             gr.HTML(logo_html)
 
-            # Başlık (Etkileyici ve dublaj temalı)
+            # Başlık ve Alt Başlık
             gr.HTML("""
             <div class="header-text">
                 Gecekondu Dubbing Production
             </div>
+            <div class="header-subtitle">
+                Your Ultimate Audio Separation & Ensemble Solution
+            </div>
             """)
 
         with gr.Tabs():
-            with gr.Tab("Audio Separation", elem_id="separation_tab"):
+            with gr.Tab("🎙️ Audio Separation", elem_id="separation_tab"):
                 with gr.Row(equal_height=True):
                     # Sol Panel - Kontroller
                     with gr.Column(scale=1, min_width=380):
@@ -421,7 +493,7 @@ def create_interface():
                                 """)
 
             # Oto Ensemble Sekmesi
-            with gr.Tab("Auto Ensemble"):
+            with gr.Tab("🤖 Auto Ensemble"):
                 with gr.Row():
                     with gr.Column():
                         with gr.Group():
@@ -513,12 +585,26 @@ def create_interface():
                                     show_download_button=True,
                                     interactive=False
                                 )
+                                refresh_output_btn = gr.Button("🔄 Refresh Output", variant="secondary")
+
+                        # Özel ilerleme barı
+                        progress_html = gr.HTML(
+                            value="""
+                            <div id="custom-progress" style="margin-top: 10px;">
+                                <div style="font-size: 1rem; color: #C0C0C0; margin-bottom: 5px;" id="progress-label">Waiting for processing...</div>
+                                <div style="width: 100%; background-color: #444; border-radius: 5px; overflow: hidden;">
+                                    <div id="progress-bar" style="width: 0%; height: 20px; background-color: #6e8efb; transition: width 0.3s;"></div>
+                                </div>
+                            </div>
+                            """
+                        )
 
                         auto_status = gr.Textbox(
                             label="Processing Status",
                             interactive=False,
                             placeholder="Waiting for processing...",
-                            elem_classes="status-box"
+                            elem_classes="status-box",
+                            visible=False
                         )
 
                         gr.Markdown("""
@@ -577,7 +663,7 @@ def create_interface():
                             """)
 
             # İndirme Sekmesi
-            with gr.Tab("Download Sources"):
+            with gr.Tab("⬇️ Download Sources"):
                 with gr.Row():
                     with gr.Column():
                         gr.Markdown("### 🗂️ Cloud Storage")
@@ -630,7 +716,7 @@ def create_interface():
                         """)
 
             # Manuel Ensemble Sekmesi
-            with gr.Tab("🎚️ Manuel Ensemble"):
+            with gr.Tab("🎚️ Manual Ensemble"):
                 with gr.Row(equal_height=True):
                     with gr.Column(scale=1, min_width=400):
                         with gr.Accordion("📂 Input Sources", open=True):
@@ -688,9 +774,15 @@ def create_interface():
                                     elem_id="process-btn"
                                 )
 
+        # Footer
         gr.HTML("""
         <div class="footer">
-            Presented by Gecekondu Production
+            <div>Presented by Gecekondu Production &copy; 2025</div>
+            <div style="margin-top: 10px;">
+                <a href="https://twitter.com" target="_blank">🐦 Twitter</a> |
+                <a href="https://instagram.com" target="_blank">📸 Instagram</a> |
+                <a href="https://github.com" target="_blank">💻 GitHub</a>
+            </div>
         </div>
         """)
 
@@ -742,7 +834,7 @@ def create_interface():
             ],
             outputs=[
                 vocals_audio, instrumental_audio, phaseremix_audio, drum_audio, karaoke_audio,
-                bass_audio, other_audio, effects_audio, speech_audio, bleed_audio, music_audio,
+                other_audio, bass_audio, effects_audio, speech_audio, bleed_audio, music_audio,
                 dry_audio, male_audio, female_audio
             ]
         )
@@ -753,7 +845,7 @@ def create_interface():
                 auto_input_audio_file, selected_models, auto_chunk_size, auto_overlap, export_format2,
                 auto_use_tta, auto_extract_instrumental, auto_ensemble_type, gr.State(None)
             ],
-            outputs=[auto_output_audio, auto_status]
+            outputs=[auto_output_audio, auto_status, progress_html]
         )
 
         drive_download_btn.click(
@@ -766,6 +858,12 @@ def create_interface():
             fn=download_callback,
             inputs=[direct_url_input, gr.State('direct'), cookie_file],
             outputs=[direct_download_output, direct_download_status, input_audio_file, auto_input_audio_file, original_audio, original_audio2]
+        )
+
+        refresh_output_btn.click(
+            fn=refresh_auto_output,
+            inputs=[],
+            outputs=[auto_output_audio, auto_status]
         )
 
         refresh_btn.click(fn=update_file_list, outputs=file_dropdown)
