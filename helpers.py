@@ -20,7 +20,6 @@ from datetime import datetime
 import yt_dlp
 import validators
 from pytube import YouTube
-from google.colab import auth
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload
 import io
@@ -33,7 +32,6 @@ from tqdm import tqdm
 from google.oauth2.credentials import Credentials
 import tempfile
 from urllib.parse import urlparse, quote
-import gdown
 import argparse
 from tqdm.auto import tqdm
 import torch.nn as nn
