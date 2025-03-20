@@ -369,21 +369,13 @@ def create_interface():
     # Arayüz tasarımı
     with gr.Blocks(theme=gr.themes.Soft(), css=css) as demo:
         with gr.Column():
-            # Logo (PNG olarak, dublaj temasına uygun)
-            logo_html = """
-            <div class="logo-container">
-                <img src="/content/gk_logo.png" alt="Gecekondu Dubbing Production" class="logo-img">
-            </div>
-            """
-            gr.HTML(logo_html)
-
             # Başlık ve Alt Başlık
             gr.HTML("""
             <div class="header-text">
                 Gecekondu Dubbing Production
             </div>
             <div class="header-subtitle">
-                Your Ultimate Audio Separation & Ensemble Solution
+                Your Ultimate Audio Separation
             </div>
             """)
 
@@ -453,6 +445,7 @@ def create_interface():
                                     with gr.Row():
                                         vocals_audio = gr.Audio(label="Vocals", show_download_button=True)
                                         instrumental_audio = gr.Audio(label="Instrumental", show_download_button=True)
+                                        other_audio = gr.Audio(label="Other", show_download_button=True)
 
                             with gr.Tab("🔍 Details"):
                                 with gr.Column():
@@ -464,7 +457,6 @@ def create_interface():
                                         drum_audio = gr.Audio(label="Drums")
                                         bass_audio = gr.Audio(label="Bass")
                                     with gr.Row():
-                                        other_audio = gr.Audio(label="Other")
                                         effects_audio = gr.Audio(label="Effects")
 
                             with gr.Tab("⚙ Advanced"):
@@ -779,9 +771,6 @@ def create_interface():
         <div class="footer">
             <div>Presented by Gecekondu Production &copy; 2025</div>
             <div style="margin-top: 10px;">
-                <a href="https://twitter.com" target="_blank">🐦 Twitter</a> |
-                <a href="https://instagram.com" target="_blank">📸 Instagram</a> |
-                <a href="https://github.com" target="_blank">💻 GitHub</a>
             </div>
         </div>
         """)
