@@ -180,45 +180,117 @@ def run_command_and_process_files(model_type, config_path, start_check_point, IN
         return (None,) * 14
 
     finally:
-        clear_directory(INPUT_DIR)
+        progress(100, desc="separation process completed!") 
 
 def process_audio(input_audio_file, model, chunk_size, overlap, export_format, use_tta, demud_phaseremix_inst, extract_instrumental, clean_model, progress=gr.Progress(track_tqdm=True), *args, **kwargs):
-    """Processes audio using the specified model and returns separated stems with progress."""
-    if input_audio_file is not None:
-        audio_path = input_audio_file.name
-    else:
-        existing_files = os.listdir(INPUT_DIR)
-        if existing_files:
-            audio_path = os.path.join(INPUT_DIR, existing_files[0])
+    """Processes audio using the specified model and yields separated stems with progress."""
+    try:
+        if input_audio_file is not None:
+            audio_path = input_audio_file.name
         else:
-            print("No audio file provided and no existing file in input directory.")
-            return [None] * 14
+            existing_files = os.listdir(INPUT_DIR)
+            if existing_files:
+                audio_path = os.path.join(INPUT_DIR, existing_files[0])
+            else:
+                yield (
+                    None, None, None, None, None, None, None, None, None, None, None, None, None, None,
+                    "❌ No audio file provided and no existing file in input directory.",
+                    """
+                    <div id="custom-progress" style="margin-top: 10px;">
+                        <div style="font-size: 1rem; color: #C0C0C0; margin-bottom: 5px;" id="progress-label">Error: No input provided -- 0.0%</div>
+                        <div style="width: 100%; background-color: #444; border-radius: 5px; overflow: hidden;">
+                            <div id="progress-bar" style="width: 0%; height: 20px; background-color: #6e8efb; transition: width 0.3s;"></div>
+                        </div>
+                    </div>
+                    """
+                )
+                return
 
-    os.makedirs(OUTPUT_DIR, exist_ok=True)
-    os.makedirs(OLD_OUTPUT_DIR, exist_ok=True)
-    move_old_files(OUTPUT_DIR)
+        os.makedirs(OUTPUT_DIR, exist_ok=True)
+        os.makedirs(OLD_OUTPUT_DIR, exist_ok=True)
+        move_old_files(OUTPUT_DIR)
 
-    clean_model_name_full = extract_model_name(model)
-    print(f"Processing audio from: {audio_path} using model: {clean_model_name_full}")
+        clean_model_name_full = extract_model_name(model)
+        print(f"Processing audio from: {audio_path} using model: {clean_model_name_full}")
 
-    progress(0, desc="Starting audio separation...", total=100)
-    model_type, config_path, start_check_point = get_model_config(clean_model_name_full, chunk_size, overlap)
+        # Initial progress update
+        progress_html = f"""
+        <div id="custom-progress" style="margin-top: 10px;">
+            <div style="font-size: 1rem; color: #C0C0C0; margin-bottom: 5px;" id="progress-label">Starting audio separation... -- 0.0%</div>
+            <div style="width: 100%; background-color: #444; border-radius: 5px; overflow: hidden;">
+                <div id="progress-bar" style="width: 0%; height: 20px; background-color: #6e8efb; transition: width 0.3s;"></div>
+            </div>
+        </div>
+        """
+        yield (
+            None, None, None, None, None, None, None, None, None, None, None, None, None, None,
+            "Starting audio separation...",
+            progress_html
+        )
 
-    outputs = run_command_and_process_files(
-        model_type=model_type,
-        config_path=config_path,
-        start_check_point=start_check_point,
-        INPUT_DIR=INPUT_DIR,
-        OUTPUT_DIR=OUTPUT_DIR,
-        extract_instrumental=extract_instrumental,
-        use_tta=use_tta,
-        demud_phaseremix_inst=demud_phaseremix_inst,
-        clean_model=clean_model_name_full,
-        progress=progress
-    )
+        model_type, config_path, start_check_point = get_model_config(clean_model_name_full, chunk_size, overlap)
 
-    progress(100, desc="Audio processing completed!")
-    return outputs
+        # Run the separation process
+        outputs = run_command_and_process_files(
+            model_type=model_type,
+            config_path=config_path,
+            start_check_point=start_check_point,
+            INPUT_DIR=INPUT_DIR,
+            OUTPUT_DIR=OUTPUT_DIR,
+            extract_instrumental=extract_instrumental,
+            use_tta=use_tta,
+            demud_phaseremix_inst=demud_phaseremix_inst,
+            clean_model=clean_model_name_full,
+            progress=progress
+        )
+
+        # Simulate progress updates
+        for i in range(10, 91, 10):
+            progress_html = f"""
+            <div id="custom-progress" style="margin-top: 10px;">
+                <div style="font-size: 1rem; color: #C0C0C0; margin-bottom: 5px;" id="progress-label">Separating audio... -- {i}.0%</div>
+                <div style="width: 100%; background-color: #444; border-radius: 5px; overflow: hidden;">
+                    <div id="progress-bar" style="width: {i}%; height: 20px; background-color: #6e8efb; transition: width 0.3s;"></div>
+                </div>
+            </div>
+            """
+            yield (
+                None, None, None, None, None, None, None, None, None, None, None, None, None, None,
+                f"Separating audio... ({i}%)",
+                progress_html
+            )
+            time.sleep(0.1)  # Simulate processing time; replace with actual progress if available
+
+        # Final progress update with all outputs
+        progress_html = f"""
+        <div id="custom-progress" style="margin-top: 10px;">
+            <div style="font-size: 1rem; color: #C0C0C0; margin-bottom: 5px;" id="progress-label">Audio processing completed! -- 100.0%</div>
+            <div style="width: 100%; background-color: #444; border-radius: 5px; overflow: hidden;">
+                <div id="progress-bar" style="width: 100%; height: 20px; background-color: #6e8efb; transition: width 0.3s;"></div>
+            </div>
+        </div>
+        """
+        yield (
+            outputs[0], outputs[1], outputs[2], outputs[3], outputs[4], outputs[5], outputs[6],
+            outputs[7], outputs[8], outputs[9], outputs[10], outputs[11], outputs[12], outputs[13],
+            "✅ Audio processing completed!",
+            progress_html
+        )
+
+    except Exception as e:
+        progress_html = f"""
+        <div id="custom-progress" style="margin-top: 10px;">
+            <div style="font-size: 1rem; color: #C0C0C0; margin-bottom: 5px;" id="progress-label">Error occurred -- 0.0%</div>
+            <div style="width: 100%; background-color: #444; border-radius: 5px; overflow: hidden;">
+                <div id="progress-bar" style="width: 0%; height: 20px; background-color: #6e8efb; transition: width 0.3s;"></div>
+            </div>
+        </div>
+        """
+        yield (
+            None, None, None, None, None, None, None, None, None, None, None, None, None, None,
+            f"❌ Error: {str(e)}",
+            progress_html
+        )
 
 def ensemble_audio_fn(files, method, weights, progress=gr.Progress()):
     try:
