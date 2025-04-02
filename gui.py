@@ -7,7 +7,7 @@ from datetime import datetime
 from helpers import update_model_dropdown, handle_file_upload, clear_old_output, save_uploaded_file, update_file_list
 from download import download_callback
 from model import get_model_config, MODEL_CONFIGS
-from processing import process_audio, auto_ensemble_process, ensemble_audio_fn, refresh_auto_output
+from processing import process_audio, auto_ensemble_process, ensemble_audio_fn, refresh_auto_output, copy_ensemble_to_drive, copy_to_drive
 
 # BASE_DIR tanımı (BASE_PATH yerine)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -485,7 +485,16 @@ def create_interface():
                             interactive=False,
                             placeholder="Waiting for processing...",
                             elem_classes="status-box",
-                            visible=False  # Görünürlüğü isteğe bağlı
+                            visible=False
+                        )
+
+                        # Yeni "Copy to Drive" butonu
+                        copy_to_drive_btn = gr.Button("📂 Copy to Drive", variant="secondary")
+                        copy_status = gr.Textbox(
+                            label="Copy Status",
+                            interactive=False,
+                            placeholder="Files will be copied here...",
+                            visible=True
                         )
 
                         with gr.Row():
@@ -587,7 +596,7 @@ def create_interface():
                                 )
                                 refresh_output_btn = gr.Button("🔄 Refresh Output", variant="secondary")
 
-                        # Özel ilerleme barı
+                        # Progress bar ve status
                         ensemble_progress_html = gr.HTML(
                             value="""
                             <div id="custom-progress" style="margin-top: 10px;">
@@ -604,6 +613,15 @@ def create_interface():
                             placeholder="Waiting for processing...",
                             elem_classes="status-box",
                             visible=False
+                        )
+
+                        # Yeni "Copy to Drive" butonu ve durum kutusu
+                        ensemble_copy_to_drive_btn = gr.Button("📂 Copy to Drive", variant="secondary")
+                        ensemble_copy_status = gr.Textbox(
+                            label="Copy Status",
+                            interactive=False,
+                            placeholder="Ensemble output will be copied here...",
+                            visible=True
                         )
 
                         gr.Markdown("""
@@ -846,6 +864,18 @@ def create_interface():
             fn=refresh_auto_output,
             inputs=[],
             outputs=[auto_output_audio, ensemble_process_status]
+        )
+
+        ensemble_copy_to_drive_btn.click(
+            fn=copy_ensemble_to_drive,
+            inputs=[],
+            outputs=[ensemble_copy_status]
+        )
+
+        copy_to_drive_btn.click(
+            fn=copy_to_drive,
+            inputs=[],
+            outputs=[copy_status]
         )
 
         refresh_btn.click(fn=update_file_list, outputs=file_dropdown)
