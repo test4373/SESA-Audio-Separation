@@ -372,7 +372,7 @@ def create_interface():
             # Başlık ve Alt Başlık
             gr.HTML("""
             <div class="header-text">
-                Gecekondu Dubbing Production
+                Gecekondu Production
             </div>
             <div class="header-subtitle">
                 Your Ultimate Audio Separation
@@ -529,24 +529,13 @@ def create_interface():
                                     value="Vocal Models"
                                 )
 
-                            auto_model_dropdown = gr.Dropdown(
+                            selected_models = gr.Dropdown(
                                 label="Select Models from Category",
                                 choices=list(MODEL_CONFIGS["Vocal Models"].keys()),
                                 multiselect=True,
                                 max_choices=50,
                                 interactive=True
                             )
-
-                            selected_models = gr.Dropdown(
-                                label="Selected Models",
-                                choices=[],
-                                multiselect=True,
-                                interactive=False
-                            )
-
-                            with gr.Row():
-                                add_btn = gr.Button("➕ Add Selected", variant="secondary")
-                                clear_btn = gr.Button("🗑️ Clear All", variant="stop")
 
                         with gr.Group():
                             gr.Markdown("### ⚡ Ensemble Settings")
@@ -657,13 +646,6 @@ def create_interface():
             # İndirme Sekmesi
             with gr.Tab("⬇️ Download Sources"):
                 with gr.Row():
-                    with gr.Column():
-                        gr.Markdown("### 🗂️ Cloud Storage")
-                        drive_url_input = gr.Textbox(label="Google Drive Shareable Link")
-                        drive_download_btn = gr.Button("⬇️ Download from Drive", variant="secondary")
-                        drive_download_status = gr.Textbox(label="Download Status")
-                        drive_download_output = gr.File(label="Downloaded File", interactive=False)
-
                     with gr.Column():
                         gr.Markdown("### 🌐 Direct Links")
                         direct_url_input = gr.Textbox(label="Audio File URL")
@@ -811,9 +793,7 @@ def create_interface():
             outputs=[auto_input_audio_file, original_audio2]
         )
 
-        auto_category_dropdown.change(fn=update_models, inputs=auto_category_dropdown, outputs=auto_model_dropdown)
-        add_btn.click(fn=add_models, inputs=[auto_model_dropdown, selected_models], outputs=selected_models)
-        clear_btn.click(fn=clear_models, inputs=[], outputs=selected_models)
+        auto_category_dropdown.change(fn=update_models, inputs=auto_category_dropdown, outputs=selected_models)
 
         process_btn.click(
             fn=process_audio,
@@ -835,12 +815,6 @@ def create_interface():
                 auto_use_tta, auto_extract_instrumental, auto_ensemble_type, gr.State(None)
             ],
             outputs=[auto_output_audio, auto_status, progress_html]
-        )
-
-        drive_download_btn.click(
-            fn=download_callback,
-            inputs=[drive_url_input, gr.State('drive')],
-            outputs=[drive_download_output, drive_download_status, input_audio_file, auto_input_audio_file, original_audio, original_audio2]
         )
 
         direct_download_btn.click(
