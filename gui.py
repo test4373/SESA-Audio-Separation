@@ -469,20 +469,39 @@ def create_interface():
                                         karaoke_audio = gr.Audio(label="Karaoke")
                                         bleed_audio = gr.Audio(label="Bleed")
 
-                            with gr.Row():
-                                gr.Markdown("""
-                                <div style="
-                                    background: rgba(245,245,220,0.15);
-                                    padding: 1rem;
-                                    border-radius: 8px;
-                                    border-left: 3px solid #6c757d;
-                                    margin: 1rem 0 1.5rem 0;
-                                ">
-                                    <b>🔈 Processing Tip:</b> For noisy results, use <code>bleed_suppressor_v1</code> 
-                                    or <code>denoisedebleed</code> models in the <i>"Denoise & Effect Removal"</i> 
-                                    category to clean the output
+                        # Progress bar and status
+                        separation_progress_html = gr.HTML(
+                            value="""
+                            <div id="custom-progress" style="margin-top: 10px;">
+                                <div style="font-size: 1rem; color: #C0C0C0; margin-bottom: 5px;" id="progress-label">Waiting for processing...</div>
+                                <div style="width: 100%; background-color: #444; border-radius: 5px; overflow: hidden;">
+                                    <div id="progress-bar" style="width: 0%; height: 20px; background-color: #6e8efb; transition: width 0.3s;"></div>
                                 </div>
-                                """)
+                            </div>
+                            """
+                        )
+                        separation_process_status = gr.Textbox(
+                            label="Processing Status",
+                            interactive=False,
+                            placeholder="Waiting for processing...",
+                            elem_classes="status-box",
+                            visible=False  # Görünürlüğü isteğe bağlı
+                        )
+
+                        with gr.Row():
+                            gr.Markdown("""
+                            <div style="
+                                background: rgba(245,245,220,0.15);
+                                padding: 1rem;
+                                border-radius: 8px;
+                                border-left: 3px solid #6c757d;
+                                margin: 1rem 0 1.5rem 0;
+                            ">
+                                <b>🔈 Processing Tip:</b> For noisy results, use <code>bleed_suppressor_v1</code> 
+                                or <code>denoisedebleed</code> models in the <i>"Denoise & Effect Removal"</i> 
+                                category to clean the output
+                            </div>
+                            """)
 
             # Oto Ensemble Sekmesi
             with gr.Tab("🤖 Auto Ensemble"):
@@ -569,7 +588,7 @@ def create_interface():
                                 refresh_output_btn = gr.Button("🔄 Refresh Output", variant="secondary")
 
                         # Özel ilerleme barı
-                        progress_html = gr.HTML(
+                        ensemble_progress_html = gr.HTML(
                             value="""
                             <div id="custom-progress" style="margin-top: 10px;">
                                 <div style="font-size: 1rem; color: #C0C0C0; margin-bottom: 5px;" id="progress-label">Waiting for processing...</div>
@@ -579,8 +598,7 @@ def create_interface():
                             </div>
                             """
                         )
-
-                        auto_status = gr.Textbox(
+                        ensemble_process_status = gr.Textbox(
                             label="Processing Status",
                             interactive=False,
                             placeholder="Waiting for processing...",
@@ -799,12 +817,13 @@ def create_interface():
             fn=process_audio,
             inputs=[
                 input_audio_file, model_dropdown, chunk_size, overlap, export_format,
-                use_tta, use_demud_phaseremix_inst, extract_instrumental, gr.State(None), gr.State(None)
+                use_tta, use_demud_phaseremix_inst, extract_instrumental, model_dropdown  # clean_model
             ],
             outputs=[
                 vocals_audio, instrumental_audio, phaseremix_audio, drum_audio, karaoke_audio,
                 other_audio, bass_audio, effects_audio, speech_audio, bleed_audio, music_audio,
-                dry_audio, male_audio, female_audio
+                dry_audio, male_audio, female_audio,
+                separation_process_status, separation_progress_html
             ]
         )
 
@@ -814,7 +833,7 @@ def create_interface():
                 auto_input_audio_file, selected_models, auto_chunk_size, auto_overlap, export_format2,
                 auto_use_tta, auto_extract_instrumental, auto_ensemble_type, gr.State(None)
             ],
-            outputs=[auto_output_audio, auto_status, progress_html]
+            outputs=[auto_output_audio, ensemble_process_status, ensemble_progress_html]
         )
 
         direct_download_btn.click(
@@ -826,7 +845,7 @@ def create_interface():
         refresh_output_btn.click(
             fn=refresh_auto_output,
             inputs=[],
-            outputs=[auto_output_audio, auto_status]
+            outputs=[auto_output_audio, ensemble_process_status]
         )
 
         refresh_btn.click(fn=update_file_list, outputs=file_dropdown)
