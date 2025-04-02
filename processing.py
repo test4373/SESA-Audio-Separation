@@ -30,6 +30,7 @@ from google.oauth2.credentials import Credentials
 import tempfile
 from urllib.parse import urlparse, quote
 from clean_model import clean_model_name, shorten_filename, clean_filename
+from google.colab import drive
 
 import warnings
 warnings.filterwarnings("ignore")
@@ -39,6 +40,66 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))  # processing.py'nin bulun
 INFERENCE_PATH = os.path.join(BASE_DIR, "inference.py")  # inference.py'nin tam yolu
 OUTPUT_DIR = os.path.join(BASE_DIR, "output")  # Çıkış dizini BASE_DIR/output olarak güncellendi
 AUTO_ENSEMBLE_OUTPUT = os.path.join(BASE_DIR, "ensemble_output")  # Ensemble çıkış dizini
+
+def copy_ensemble_to_drive():
+    """Copies the latest ensemble output file to Google Drive if mounted."""
+    try:
+        # Check if Google Drive is mounted
+        if not os.path.exists('/content/drive'):
+            drive.mount('/content/drive')
+            status = "Google Drive mounted. Copying ensemble output..."
+        else:
+            status = "Google Drive already mounted. Copying ensemble output..."
+
+        # Define source directory and find the latest file
+        source_dir = AUTO_ENSEMBLE_OUTPUT  # AUTO_ENSEMBLE_OUTPUT from processing.py
+        output_files = glob.glob(os.path.join(source_dir, "*.wav"))
+        if not output_files:
+            return "❌ No ensemble output files found."
+
+        # En son oluşturulan dosyayı bul
+        latest_file = max(output_files, key=os.path.getctime)
+        filename = os.path.basename(latest_file)
+
+        # Define destination path
+        dest_dir = "/content/drive/MyDrive/SESA_Ensemble_Output"  # Customize this path as needed
+        os.makedirs(dest_dir, exist_ok=True)
+        dest_path = os.path.join(dest_dir, filename)
+
+        # Copy the latest file to Drive
+        shutil.copy2(latest_file, dest_path)
+
+        return f"✅ Ensemble output copied to {dest_path}"
+    except Exception as e:
+        return f"❌ Error copying ensemble output: {str(e)}"
+
+def copy_to_drive():
+    """Copies processed files from OUTPUT_DIR to Google Drive if mounted."""
+    try:
+        # Check if Google Drive is mounted
+        if not os.path.exists('/content/drive'):
+            drive.mount('/content/drive')
+            status = "Google Drive mounted. Copying files..."
+        else:
+            status = "Google Drive already mounted. Copying files..."
+
+        # Define source and destination paths
+        source_dir = OUTPUT_DIR  # Assuming OUTPUT_DIR is defined globally
+        dest_dir = "/content/drive/MyDrive/SESA_Output"  # Customize this path as needed
+
+        # Create destination directory if it doesn't exist
+        os.makedirs(dest_dir, exist_ok=True)
+
+        # Copy all files from OUTPUT_DIR to Drive
+        for filename in os.listdir(source_dir):
+            src_path = os.path.join(source_dir, filename)
+            dest_path = os.path.join(dest_dir, filename)
+            if os.path.isfile(src_path):
+                shutil.copy2(src_path, dest_path)
+
+        return f"✅ Files copied to {dest_dir}"
+    except Exception as e:
+        return f"❌ Error copying files: {str(e)}"        
 
 def refresh_auto_output():
     """AUTO_ENSEMBLE_OUTPUT dizinindeki en son dosyayı bulur ve döndürür."""
