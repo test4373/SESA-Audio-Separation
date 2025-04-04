@@ -7,7 +7,6 @@ SESA-Audio-Separation is a tool for separating audio tracks (e.g., vocals, instr
 
 ### Option 1: Clone and Run via Git
 1. **Clone the Repository**:
-   ```bash
    git clone https://github.com/test4373/SESA-Audio-Separation.git
    cd SESA-Audio-Separation
    ```
