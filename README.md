@@ -16,7 +16,7 @@ SESA-Audio-Separation is a tool for separating audio tracks (e.g., vocals, instr
    - Python 3.6+: [Download here](https://www.python.org/)
 
 3. **Run the App**:
-   - Place `start.bat` or 'start.sh" in the `SESA-Audio-Separation` folder.
+   - Place `start.bat` or `start.sh` in the `SESA-Audio-Separation` folder.
    - Double-click `start.bat` or run it from the command prompt:
      ```bash
      start.bat
