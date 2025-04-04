@@ -35,7 +35,7 @@ SESA-Audio-Separation is a tool for separating audio tracks (e.g., vocals, instr
 - The script will set up the environment and launch the app.
 
 ### Usage
-- After running `start.bat`, access the Gradio interface at `http://localhost:7860`.
+- After running `start.bat`, access the Gradio interface at `gradio link`.
 
 ## Notes
 - `start.bat` handles dependency installation and app startup. To sync with the latest GitHub changes, you’ll need Git installed and can manually run `git pull origin main`.
