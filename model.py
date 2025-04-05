@@ -255,6 +255,26 @@ MODEL_CONFIGS = {
             ],
             'needs_conf_edit': True
         },
+        'INST-Mel-Roformer v1e+ (by unwa)': {
+            'model_type': 'mel_band_roformer',
+            'config_path': os.path.join(CHECKPOINT_DIR, 'config_melbandroformer_inst.yaml'),
+            'start_check_point': os.path.join(CHECKPOINT_DIR, 'melband_roformer_inst_v1.ckpt'),
+            'download_urls': [
+                'https://huggingface.co/pcunwa/Mel-Band-Roformer-Inst/resolve/main/inst_v1e_plus.ckpt',
+                'https://huggingface.co/pcunwa/Mel-Band-Roformer-Inst/raw/main/config_melbandroformer_inst.yaml'
+            ],
+            'needs_conf_edit': True
+        },
+        'INST-Mel-Roformer v1+ (by unwa)': {
+            'model_type': 'mel_band_roformer',
+            'config_path': os.path.join(CHECKPOINT_DIR, 'config_melbandroformer_inst.yaml'),
+            'start_check_point': os.path.join(CHECKPOINT_DIR, 'melband_roformer_inst_v1.ckpt'),
+            'download_urls': [
+                'https://huggingface.co/pcunwa/Mel-Band-Roformer-Inst/resolve/main/inst_v1_plus_test.ckpt',
+                'https://huggingface.co/pcunwa/Mel-Band-Roformer-Inst/raw/main/config_melbandroformer_inst.yaml'
+            ],
+            'needs_conf_edit': True
+        },
         'INST-Mel-Roformer v2 (by unwa)': {
             'model_type': 'mel_band_roformer',
             'config_path': os.path.join(CHECKPOINT_DIR, 'config_melbandroformer_inst_v2.yaml'),
