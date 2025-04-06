@@ -2,7 +2,8 @@ import os
 import json
 from pathlib import Path
 from locale import getdefaultlocale
-from helpers import BASE_DIR
+
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 now_dir = os.path.dirname(os.path.abspath(__file__))
 
