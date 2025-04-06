@@ -548,6 +548,16 @@ MODEL_CONFIGS = {
                 'https://huggingface.co/GaboxR67/MelBandRoformers/resolve/main/melbandroformers/instrumental/denoisedebleed.ckpt'
             ],
             'needs_conf_edit': True
+            
+        'bleed_suppressor_v1 (by unwa)': {
+            'model_type': 'mel_band_roformer',
+            'config_path': os.path.join(CHECKPOINT_DIR, 'config_bleed_suppressor_v1.yaml'),
+            'start_check_point': os.path.join(CHECKPOINT_DIR, 'bleed_suppressor_v1.ckpt'),
+            'download_urls': [
+                'https://huggingface.co/ASesYusuf1/MODELS/resolve/main/bleed_suppressor_v1.ckpt',
+                'https://huggingface.co/ASesYusuf1/MODELS/resolve/main/config_bleed_suppressor_v1.yaml'
+            ],
+            'needs_conf_edit': True    
         }
     },
     "Dereverb Models": {
@@ -612,6 +622,18 @@ MODEL_CONFIGS = {
             'needs_conf_edit': True
         }
     },
+    "Karaoke": {
+        'KaraokeGabox': {
+            'model_type': 'mel_band_roformer',
+            'config_path': os.path.join(CHECKPOINT_DIR, 'config_mel_band_roformer_karaoke.yaml'),
+            'start_check_point': os.path.join(CHECKPOINT_DIR, 'KaraokeGabox.ckpt'),
+            'download_urls': [
+                'https://github.com/deton24/Colab-for-new-MDX_UVR_models/releases/download/v1.0.0/config_mel_band_roformer_karaoke.yaml',
+                'https://huggingface.co/GaboxR67/MelBandRoformers/blob/main/melbandroformers/experimental/KaraokeGabox.ckpt'
+            ],
+            'needs_conf_edit': True
+        }
+    },   
     "Other Models": {
         'KARAOKE-MelBand-Roformer (by aufr33 & viperx)': {
             'model_type': 'mel_band_roformer',
@@ -663,16 +685,6 @@ MODEL_CONFIGS = {
             ],
             'needs_conf_edit': False
         },
-        'bleed_suppressor_v1 (by unwa)': {
-            'model_type': 'mel_band_roformer',
-            'config_path': os.path.join(CHECKPOINT_DIR, 'config_bleed_suppressor_v1.yaml'),
-            'start_check_point': os.path.join(CHECKPOINT_DIR, 'bleed_suppressor_v1.ckpt'),
-            'download_urls': [
-                'https://huggingface.co/ASesYusuf1/MODELS/resolve/main/bleed_suppressor_v1.ckpt',
-                'https://huggingface.co/ASesYusuf1/MODELS/resolve/main/config_bleed_suppressor_v1.yaml'
-            ],
-            'needs_conf_edit': True
-        },
         'SYH99999/MelBandRoformerSYHFTB1_Model1 (by Amane)': {
             'model_type': 'mel_band_roformer',
             'config_path': os.path.join(CHECKPOINT_DIR, 'config.yaml'),
@@ -700,16 +712,6 @@ MODEL_CONFIGS = {
             'download_urls': [
                 'https://huggingface.co/SYH99999/MelBandRoformerSYHFTB1/resolve/main/config.yaml',
                 'https://huggingface.co/SYH99999/MelBandRoformerSYHFTB1/resolve/main/model3.ckpt'
-            ],
-            'needs_conf_edit': True
-        },
-        'KaraokeGabox': {
-            'model_type': 'mel_band_roformer',
-            'config_path': os.path.join(CHECKPOINT_DIR, 'config_mel_band_roformer_karaoke.yaml'),
-            'start_check_point': os.path.join(CHECKPOINT_DIR, 'KaraokeGabox.ckpt'),
-            'download_urls': [
-                'https://github.com/deton24/Colab-for-new-MDX_UVR_models/releases/download/v1.0.0/config_mel_band_roformer_karaoke.yaml',
-                'https://huggingface.co/GaboxR67/MelBandRoformers/blob/main/melbandroformers/experimental/KaraokeGabox.ckpt'
             ],
             'needs_conf_edit': True
         }
