@@ -7,6 +7,9 @@ import soundfile as sf
 import numpy as np
 import argparse
 import gc
+from assets.i18n.i18n import I18nAuto
+
+i18n = I18nAuto()
 
 def stft(wave, nfft, hl):
     wave_left = np.asfortranarray(wave[0])
@@ -108,39 +111,38 @@ def average_waveforms(pred_track, weights, algorithm, chunk_length):
     return pred_track
 
 def ensemble_files(args):
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--files", type=str, required=True, nargs='+', help="Path to all audio-files to ensemble")
-    parser.add_argument("--type", type=str, default='avg_wave', help="One of avg_wave, median_wave, min_wave, max_wave, avg_fft, median_fft, min_fft, max_fft")
-    parser.add_argument("--weights", type=float, nargs='+', help="Weights to create ensemble. Number of weights must be equal to number of files")
-    parser.add_argument("--output", default="res.wav", type=str, help="Path to wav file where ensemble result will be stored")
+    parser = argparse.ArgumentParser(description=i18n("ensemble_files_description"))
+    parser.add_argument("--files", type=str, required=True, nargs='+', help=i18n("ensemble_files_help"))
+    parser.add_argument("--type", type=str, default='avg_wave', help=i18n("ensemble_type_help"))
+    parser.add_argument("--weights", type=float, nargs='+', help=i18n("ensemble_weights_help"))
+    parser.add_argument("--output", default="res.wav", type=str, help=i18n("ensemble_output_help"))
     if args is None:
         args = parser.parse_args()
     else:
         args = parser.parse_args(args)
 
-    print('Ensemble type: {}'.format(args.type))
-    print('Number of input files: {}'.format(len(args.files)))
+    print(i18n("ensemble_type_print").format(args.type))
+    print(i18n("num_input_files_print").format(len(args.files)))
     if args.weights is not None:
         weights = np.array(args.weights)
     else:
         weights = np.ones(len(args.files))
-    print('Weights: {}'.format(weights))
-    print('Output file: {}'.format(args.output))
+    print(i18n("weights_print").format(weights))
+    print(i18n("output_file_print").format(args.output))
 
-    durations = [librosa.get_duration(filename=f) for f in args.files]
+    durations = [librosa.get_duration(path=f) for f in args.files]
     if not all(d == durations[0] for d in durations):
-        raise ValueError("All files must have the same duration")
+        raise ValueError(i18n("duration_mismatch_error"))
 
     total_duration = durations[0]
     sr = librosa.get_samplerate(args.files[0])
     chunk_duration = 30  # 30 saniyelik parçalar
-    overlap_duration = 0.1  # 100 ms overlap
+    overlap_duration = 0.1  # 100 ms örtüşme
     chunk_samples = int(chunk_duration * sr)
     overlap_samples = int(overlap_duration * sr)
-    step_samples = chunk_samples - overlap_samples  # Adım boyutu overlap ile azaltılır
+    step_samples = chunk_samples - overlap_samples
     total_samples = int(total_duration * sr)
 
-    # Chunk uzunluğunu hop_length ile hizala
     hop_length = 1024
     chunk_samples = ((chunk_samples + hop_length - 1) // hop_length) * hop_length
     step_samples = chunk_samples - overlap_samples
@@ -153,17 +155,16 @@ def ensemble_files(args):
 
             for f in args.files:
                 if not os.path.isfile(f):
-                    print('Error. Can\'t find file: {}. Check paths.'.format(f))
+                    print(i18n("file_not_found_error").format(f))
                     exit()
-                print(f'Reading chunk from file: {f} (start: {start/sr}s, duration: {(end-start)/sr}s)')
+                print(i18n("reading_chunk_print").format(f, start/sr, (end-start)/sr))
                 wav, _ = librosa.load(f, sr=sr, mono=False, offset=start/sr, duration=(end-start)/sr)
                 data.append(wav)
 
             res = average_waveforms(data, weights, args.type, chunk_length)
             res = res.astype(np.float32)
-            print(f'Chunk result shape: {res.shape}')
+            print(i18n("chunk_result_shape_print").format(res.shape))
 
-            # Crossfade ile birleştirme
             if start > 0:
                 outfile.seek(outfile.tell() - overlap_samples)
                 prev_data = outfile.read(overlap_samples).T
@@ -181,7 +182,7 @@ def ensemble_files(args):
             del res
             gc.collect()
 
-    print(f'Ensemble completed. Output saved to: {args.output}')
+    print(i18n("ensemble_completed_print").format(args.output))
 
 if __name__ == "__main__":
     ensemble_files(None)
