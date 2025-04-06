@@ -6,6 +6,9 @@ import torch
 from urllib.parse import quote
 from helpers import INPUT_DIR, COOKIE_PATH, clear_directory, clear_temp_folder, BASE_DIR
 import yaml
+from assets.i18n.i18n import I18nAuto
+
+i18n = I18nAuto()
 
 def download_callback(url, download_type='direct', cookie_file=None):
     clear_temp_folder("/tmp", exclude_items=["gradio", "config.json"])
@@ -13,7 +16,7 @@ def download_callback(url, download_type='direct', cookie_file=None):
     os.makedirs(INPUT_DIR, exist_ok=True)
 
     if not validators.url(url):
-        return None, "❌ Invalid URL", None, None, None, None
+        return None, i18n("invalid_url"), None, None, None, None
 
     if cookie_file is not None:
         try:
@@ -21,9 +24,9 @@ def download_callback(url, download_type='direct', cookie_file=None):
                 cookie_content = f.read()
             with open(COOKIE_PATH, "wb") as f:
                 f.write(cookie_content)
-            print("✅ Cookie file updated!")
+            print(i18n("cookie_file_updated"))
         except Exception as e:
-            print(f"⚠️ Cookie installation error: {str(e)}")
+            print(i18n("cookie_installation_error").format(str(e)))
 
     wav_path = None
     download_success = False
@@ -37,9 +40,9 @@ def download_callback(url, download_type='direct', cookie_file=None):
                 wav_path = output_path
                 download_success = True
             else:
-                raise Exception("File size zero or file not created")
+                raise Exception(i18n("file_size_zero_error"))
         except Exception as e:
-            error_msg = f"❌ Google Drive download error: {str(e)}"
+            error_msg = i18n("google_drive_error").format(str(e))
             print(error_msg)
             return None, error_msg, None, None, None, None
     else:
@@ -64,9 +67,9 @@ def download_callback(url, download_type='direct', cookie_file=None):
                 if os.path.exists(wav_path):
                     download_success = True
                 else:
-                    raise Exception("WAV conversion failed")
+                    raise Exception(i18n("wav_conversion_failed"))
         except Exception as e:
-            error_msg = f"❌ Download error: {str(e)}"
+            error_msg = i18n("download_error").format(str(e))
             print(error_msg)
             return None, error_msg, None, None, None, None
 
@@ -76,10 +79,10 @@ def download_callback(url, download_type='direct', cookie_file=None):
                 os.remove(os.path.join(INPUT_DIR, f))
         return (
             wav_path,
-            "🎉 Downloaded successfully!",
+            i18n("download_success"),
             wav_path,
             wav_path,
             wav_path,
             wav_path
         )
-    return None, "❌ Download failed", None, None, None, None
+    return None, i18n("download_failed"), None, None, None, None
