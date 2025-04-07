@@ -30,6 +30,9 @@ if not os.path.exists(CONFIG_FILE):
 # I18nAuto örneği (arayüz başlamadan önce dil yüklenir)
 i18n = I18nAuto()
 
+# Çıktı formatları
+OUTPUT_FORMATS = ['wav', 'flac', 'mp3', 'ogg', 'opus', 'm4a', 'aiff', 'ac3']
+
 # Arayüz oluşturma fonksiyonu
 def create_interface():
     css = """
@@ -154,6 +157,7 @@ def create_interface():
             <div class="header-subtitle">{i18n("ultimate_audio_separation")}</div>
             """
         )
+
         with gr.Tabs():
             with gr.Tab(i18n("audio_separation_tab"), id="separation_tab"):
                 with gr.Row(equal_height=True):
@@ -181,7 +185,6 @@ def create_interface():
                                 )
 
                         with gr.Accordion(i18n("settings"), open=False) as settings_accordion:
-                            # Row 1: Format and Chunk Size side by side
                             with gr.Row():
                                 with gr.Column(scale=1):
                                     export_format = gr.Dropdown(
@@ -197,36 +200,111 @@ def create_interface():
                                         info=i18n("chunk_size_info")
                                     )
 
-                            # Row 2: Overlap Slider and TTA Checkbox
-
-                                with gr.Row():
-                                    overlap_info = gr.Markdown(i18n("overlap_info"))
-
                             with gr.Row():
                                 with gr.Column(scale=2):
-                                    overlap = gr.Slider(2, 50, step=1, label=i18n("overlap"), value=2)
-
-                                with gr.Column(scale=1):
-                                    use_tta = gr.Checkbox(label=i18n("tta_boost"))
-
-                            # Row 4: Phase Fix and Instrumental Checkboxes
-
-                                with gr.Row():
-                                    phase_fix_info = gr.Markdown(i18n("phase_fix_info")) 
+                                    overlap = gr.Slider(
+                                        minimum=2,
+                                        maximum=50,
+                                        step=1,
+                                        label=i18n("overlap"),
+                                        value=2,
+                                        info=i18n("overlap_info")  # Bu zaten doğru, ancak görünmüyorsa aşağıda Markdown ile ekleyeceğiz
+                                    )
 
                             with gr.Row():
                                 with gr.Column(scale=1):
-                                    use_demud_phaseremix_inst = gr.Checkbox(label=i18n("phase_fix"))
-
-                                       
+                                    use_tta = gr.Checkbox(
+                                        label=i18n("tta_boost"),
+                                        info=i18n("tta_info")
+                                    )
+                                    
+                            with gr.Row():
                                 with gr.Column(scale=1):
-                                    extract_instrumental = gr.Checkbox(label=i18n("instrumental"))
+                                    use_demud_phaseremix_inst = gr.Checkbox(
+                                        label=i18n("phase_fix"),
+                                        info=i18n("phase_fix_info")
+                                    )
 
-                        # Buttons outside the accordion
+                                with gr.Column(scale=1):
+                                    extract_instrumental = gr.Checkbox(
+                                        label=i18n("instrumental"),
+                                        info=i18n("instrumental_info")
+                                    )
+
+                            # Apollo ayarları
+                            with gr.Row():
+                                use_apollo = gr.Checkbox(
+                                    label=i18n("enhance_with_apollo"),
+                                    value=False,
+                                    info=i18n("apollo_enhancement_info")
+                                )
+
+                            # Apollo ayarlarını tek bir grup altında topluyoruz
+                            with gr.Group(visible=False) as apollo_settings_group:
+                                with gr.Row():
+                                    with gr.Column(scale=1):
+                                        apollo_chunk_size = gr.Slider(
+                                            label=i18n("apollo_chunk_size"),
+                                            minimum=3,
+                                            maximum=25,
+                                            step=1,
+                                            value=19,
+                                            info=i18n("apollo_chunk_size_info"),
+                                            interactive=True
+                                        )
+                                    with gr.Column(scale=1):
+                                        apollo_overlap = gr.Slider(
+                                            label=i18n("apollo_overlap"),
+                                            minimum=2,
+                                            maximum=10,
+                                            step=1,
+                                            value=2,
+                                            info=i18n("apollo_overlap_info"),
+                                            interactive=True
+                                        )
+
+                                with gr.Row():
+                                    apollo_method = gr.Dropdown(
+                                        label=i18n("apollo_processing_method"),
+                                        choices=[i18n("normal_method"), i18n("mid_side_method")],
+                                        value=i18n("normal_method"),
+                                        interactive=True
+                                    )
+
+                                with gr.Row(visible=True) as apollo_normal_model_row:
+                                    apollo_normal_model = gr.Dropdown(
+                                        label=i18n("apollo_normal_model"),
+                                        choices=["MP3 Enhancer", "Lew Vocal Enhancer", "Lew Vocal Enhancer v2 (beta)", "Apollo Universal Model"],
+                                        value="Apollo Universal Model",
+                                        interactive=True
+                                    )
+
+                                with gr.Row(visible=False) as apollo_midside_model_row:
+                                    apollo_midside_model = gr.Dropdown(
+                                        label=i18n("apollo_mid_side_model"),
+                                        choices=["MP3 Enhancer", "Lew Vocal Enhancer", "Lew Vocal Enhancer v2 (beta)", "Apollo Universal Model"],
+                                        value="Apollo Universal Model",
+                                        interactive=True
+                                    )
+
                         with gr.Row():
                             process_btn = gr.Button(i18n("process"), variant="primary")
                             clear_old_output_btn = gr.Button(i18n("reset"), variant="secondary")
                         clear_old_output_status = gr.Textbox(label=i18n("status"), interactive=False)
+
+                        # Apollo ayarlarının görünürlüğünü kontrol eden event
+                        use_apollo.change(
+                            fn=lambda x: gr.update(visible=x),
+                            inputs=use_apollo,
+                            outputs=apollo_settings_group
+                        )
+
+                        # Mid/Side model dropdown’ını kontrol eden event
+                        apollo_method.change(
+                            fn=lambda x: [gr.update(visible=x != i18n("mid_side_method")), gr.update(visible=x == i18n("mid_side_method"))],
+                            inputs=apollo_method,
+                            outputs=[apollo_normal_model_row, apollo_midside_model_row]
+                        )
 
                     with gr.Column(scale=2, min_width=800):
                         with gr.Tabs():
@@ -509,7 +587,9 @@ def create_interface():
             fn=process_audio,
             inputs=[
                 input_audio_file, model_dropdown, chunk_size, overlap, export_format,
-                use_tta, use_demud_phaseremix_inst, extract_instrumental, model_dropdown
+                use_tta, use_demud_phaseremix_inst, extract_instrumental, model_dropdown,
+                use_apollo, apollo_chunk_size, apollo_overlap,
+                apollo_method, apollo_normal_model, apollo_midside_model
             ],
             outputs=[
                 vocals_audio, instrumental_audio, phaseremix_audio, drum_audio, karaoke_audio,
