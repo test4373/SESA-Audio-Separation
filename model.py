@@ -73,6 +73,16 @@ MODEL_CONFIGS = {
             ],
             'needs_conf_edit': False
         },
+        'VOCALS-Mel-Roformer FT 3 Preview (by unwa)': {
+            'model_type': 'mdx23c',
+            'config_path': os.path.join(CHECKPOINT_DIR, 'config_kimmel_unwa_ft.yaml'),
+            'start_check_point': os.path.join(CHECKPOINT_DIR, 'kimmel_unwa_ft3_prev.ckpt'),
+            'download_urls': [
+                'https://huggingface.co/pcunwa/Kim-Mel-Band-Roformer-FT/resolve/main/config_kimmel_unwa_ft.yaml',
+                'https://huggingface.co/pcunwa/Kim-Mel-Band-Roformer-FT/resolve/main/kimmel_unwa_ft3_prev.ckpt'
+            ],
+            'needs_conf_edit': False
+        },
         'VOCALS-InstVocHQ': {
             'model_type': 'mdx23c',
             'config_path': os.path.join(CHECKPOINT_DIR, 'config_vocals_mdx23c.yaml'),
