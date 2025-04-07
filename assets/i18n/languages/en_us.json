@@ -18,6 +18,7 @@
   "overlap_info": "Recommended: 2-10 (Higher values increase quality but require more VRAM)",
   "tta_boost": "TTA Boost",
   "phase_fix": "Phase Fix",
+  "use_phase_correction": "Apply Advanced Phase Correction",
   "phase_fix_info": "Advanced phase correction for instrumental tracks",
   "instrumental": "Instrumental",
   "process": "🚀 Process",
@@ -242,6 +243,12 @@
   "starting_ngrok": "Starting Ngrok on port {port}...",
   "ngrok_url": "Ngrok URL: {url}",
   "ngrok_error": "Error starting ngrok: {error}",
+  "apollo_chunk_size": "Apollo Chunk Size",
+  "apollo_chunk_size_info": "Chunk size for Apollo enhancement (recommended: 19 for Universal Model)",
+  "apollo_overlap": "Apollo Overlap",
+  "enhancing_with_apollo": "Enhancing with Apollo ({}/{} files)...",
+  "apollo_processing_completed": "Apollo processing completed!",
+  "apollo_overlap_info": "Overlap for Apollo enhancement (recommended: 2)",
   "invalid_method": "Error: Invalid method! Use 'gradio', 'localtunnel', or 'ngrok'.",
   "language_changed_message": "Language changed. please restart the cell."
 }
