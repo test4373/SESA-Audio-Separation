@@ -548,7 +548,7 @@ MODEL_CONFIGS = {
                 'https://huggingface.co/GaboxR67/MelBandRoformers/resolve/main/melbandroformers/instrumental/denoisedebleed.ckpt'
             ],
             'needs_conf_edit': True
-            
+        },    
         'bleed_suppressor_v1 (by unwa)': {
             'model_type': 'mel_band_roformer',
             'config_path': os.path.join(CHECKPOINT_DIR, 'config_bleed_suppressor_v1.yaml'),
