@@ -39,39 +39,33 @@ import warnings
 warnings.filterwarnings("ignore")
 
 # BASE_DIR'i dinamik olarak güncel dizine ayarla
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))  # processing.py'nin bulunduğu dizin
-INFERENCE_PATH = os.path.join(BASE_DIR, "inference.py")  # inference.py'nin tam yolu
-OUTPUT_DIR = os.path.join(BASE_DIR, "output")  # Çıkış dizini BASE_DIR/output olarak güncellendi
-AUTO_ENSEMBLE_OUTPUT = os.path.join(BASE_DIR, "ensemble_output")  # Ensemble çıkış dizini
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+INFERENCE_PATH = os.path.join(BASE_DIR, "inference.py")
+OUTPUT_DIR = os.path.join(BASE_DIR, "output")
+AUTO_ENSEMBLE_OUTPUT = os.path.join(BASE_DIR, "ensemble_output")
 
 def copy_ensemble_to_drive():
     """Copies the latest ensemble output file to Google Drive if mounted."""
     try:
-        # Check if Google Drive is mounted
         if not os.path.exists('/content/drive'):
             drive.mount('/content/drive')
             status = "Google Drive mounted. Copying ensemble output..."
         else:
             status = "Google Drive already mounted. Copying ensemble output..."
 
-        # Define source directory and find the latest file
-        source_dir = AUTO_ENSEMBLE_OUTPUT  # AUTO_ENSEMBLE_OUTPUT from processing.py
+        source_dir = AUTO_ENSEMBLE_OUTPUT
         output_files = glob.glob(os.path.join(source_dir, "*.wav"))
         if not output_files:
             return "❌ No ensemble output files found."
 
-        # En son oluşturulan dosyayı bul
         latest_file = max(output_files, key=os.path.getctime)
         filename = os.path.basename(latest_file)
 
-        # Define destination path
-        dest_dir = "/content/drive/MyDrive/SESA_Ensemble_Output"  # Customize this path as needed
+        dest_dir = "/content/drive/MyDrive/SESA_Ensemble_Output"
         os.makedirs(dest_dir, exist_ok=True)
         dest_path = os.path.join(dest_dir, filename)
 
-        # Copy the latest file to Drive
         shutil.copy2(latest_file, dest_path)
-
         return f"✅ Ensemble output copied to {dest_path}"
     except Exception as e:
         return f"❌ Error copying ensemble output: {str(e)}"
@@ -79,21 +73,16 @@ def copy_ensemble_to_drive():
 def copy_to_drive():
     """Copies processed files from OUTPUT_DIR to Google Drive if mounted."""
     try:
-        # Check if Google Drive is mounted
         if not os.path.exists('/content/drive'):
             drive.mount('/content/drive')
             status = "Google Drive mounted. Copying files..."
         else:
             status = "Google Drive already mounted. Copying files..."
 
-        # Define source and destination paths
-        source_dir = OUTPUT_DIR  # Assuming OUTPUT_DIR is defined globally
-        dest_dir = "/content/drive/MyDrive/SESA_Output"  # Customize this path as needed
-
-        # Create destination directory if it doesn't exist
+        source_dir = OUTPUT_DIR
+        dest_dir = "/content/drive/MyDrive/SESA_Output"
         os.makedirs(dest_dir, exist_ok=True)
 
-        # Copy all files from OUTPUT_DIR to Drive
         for filename in os.listdir(source_dir):
             src_path = os.path.join(source_dir, filename)
             dest_path = os.path.join(dest_dir, filename)
@@ -102,7 +91,7 @@ def copy_to_drive():
 
         return f"✅ Files copied to {dest_dir}"
     except Exception as e:
-        return f"❌ Error copying files: {str(e)}"  
+        return f"❌ Error copying files: {str(e)}"
 
 def refresh_auto_output():
     """AUTO_ENSEMBLE_OUTPUT dizinindeki en son dosyayı bulur ve döndürür."""
@@ -129,7 +118,7 @@ def extract_model_name(full_model_string):
             cleaned = cleaned[len(prefix):]
     return cleaned.strip()
 
-def run_command_and_process_files(model_type, config_path, start_check_point, INPUT_DIR, OUTPUT_DIR, extract_instrumental, use_tta, demud_phaseremix_inst, clean_model, progress=gr.Progress()):
+def run_command_and_process_files(model_type, config_path, start_check_point, INPUT_DIR, OUTPUT_DIR, extract_instrumental, use_tta, demud_phaseremix_inst, clean_model, progress=gr.Progress(), use_apollo=True, apollo_normal_model="Apollo Universal Model", chunk_size=19, overlap=2, apollo_method="Normal Method", apollo_midside_model=None, output_format="wav"):
     try:
         cmd_parts = [
             "python", INFERENCE_PATH,
@@ -146,6 +135,7 @@ def run_command_and_process_files(model_type, config_path, start_check_point, IN
         if demud_phaseremix_inst:
             cmd_parts.append("--demud_phaseremix_inst")
 
+        # Normal ses ayrıştırma
         process = subprocess.Popen(
             cmd_parts,
             cwd=BASE_DIR,
@@ -203,37 +193,199 @@ def run_command_and_process_files(model_type, config_path, start_check_point, IN
             ]
             return matching_files[0] if matching_files else None
 
-        vocal_file = find_file('vocals')
-        instrumental_file = find_file('instrumental')
-        phaseremix_file = find_file('phaseremix')
-        drum_file = find_file('drum')
-        bass_file = find_file('bass')
-        other_file = find_file('other')
-        effects_file = find_file('effects')
-        speech_file = find_file('speech')
-        music_file = find_file('music')
-        dry_file = find_file('dry')
-        male_file = find_file('male')
-        female_file = find_file('female')
-        bleed_file = find_file('bleed')
-        karaoke_file = find_file('karaoke')
+        output_list = [
+            find_file('vocals'), find_file('instrumental'), find_file('phaseremix'),
+            find_file('drum'), find_file('bass'), find_file('other'), find_file('effects'),
+            find_file('speech'), find_file('music'), find_file('dry'), find_file('male'),
+            find_file('female'), find_file('bleed'), find_file('karaoke')
+        ]
 
-        return (
-            vocal_file or None,
-            instrumental_file or None,
-            phaseremix_file or None,
-            drum_file or None,
-            bass_file or None,
-            other_file or None,
-            effects_file or None,
-            speech_file or None,
-            music_file or None,
-            dry_file or None,
-            male_file or None,
-            female_file or None,
-            bleed_file or None,
-            karaoke_file or None
-        )
+        # Normal çıktılar için normalizasyon ve amplifikasyon kaldırıldı
+        normalized_outputs = []
+        for output_file in output_list:
+            if output_file and os.path.exists(output_file):
+                # Dosyayı olduğu gibi kullan
+                normalized_file = os.path.join(OUTPUT_DIR, f"{os.path.splitext(os.path.basename(output_file))[0]}.{output_format}")
+                # Eğer dosya zaten istenen formattaysa ve aynı dosya değilse kopyala
+                if output_file.endswith(f".{output_format}") and output_file != normalized_file:
+                    shutil.copy(output_file, normalized_file)
+                elif output_file != normalized_file:
+                    audio, sr = librosa.load(output_file, sr=None, mono=False)
+                    sf.write(normalized_file, audio.T if audio.ndim > 1 else audio, sr)
+                else:
+                    # Eğer kaynak ve hedef aynıysa, kopyalamayı atla
+                    normalized_file = output_file
+                normalized_outputs.append(normalized_file)
+            else:
+                normalized_outputs.append(output_file)
+
+        # Apollo ile kalite artırma
+        if use_apollo:
+            apollo_script = "/content/Apollo/inference.py"
+
+            # Model seçimi
+            if apollo_method == i18n("normal_method"):
+                if apollo_normal_model == "MP3 Enhancer":
+                    ckpt = "/content/Apollo/model/pytorch_model.bin"
+                    config = "/content/Apollo/configs/apollo.yaml"
+                elif apollo_normal_model == "Lew Vocal Enhancer":
+                    ckpt = "/content/Apollo/model/apollo_model.ckpt"
+                    config = "/content/Apollo/configs/apollo.yaml"
+                elif apollo_normal_model == "Lew Vocal Enhancer v2 (beta)":
+                    ckpt = "/content/Apollo/model/apollo_model_v2.ckpt"
+                    config = "/content/Apollo/configs/config_apollo_vocal.yaml"
+                else:  # Apollo Universal Model varsayılan
+                    ckpt = "/content/Apollo/model/apollo_universal_model.ckpt"
+                    config = "/content/Apollo/configs/config_apollo.yaml"
+            else:  # Mid/Side metod
+                if apollo_normal_model == "MP3 Enhancer":
+                    ckpt = "/content/Apollo/model/pytorch_model.bin"
+                    config = "/content/Apollo/configs/apollo.yaml"
+                elif apollo_normal_model == "Lew Vocal Enhancer":
+                    ckpt = "/content/Apollo/model/apollo_model.ckpt"
+                    config = "/content/Apollo/configs/apollo.yaml"
+                elif apollo_normal_model == "Lew Vocal Enhancer v2 (beta)":
+                    ckpt = "/content/Apollo/model/apollo_model_v2.ckpt"
+                    config = "/content/Apollo/configs/config_apollo_vocal.yaml"
+                else:  # Apollo Universal Model varsayılan
+                    ckpt = "/content/Apollo/model/apollo_universal_model.ckpt"
+                    config = "/content/Apollo/configs/config_apollo.yaml"
+
+            # Model dosyalarının varlığını kontrol et
+            if not os.path.exists(ckpt):
+                raise FileNotFoundError(f"Apollo checkpoint file not found: {ckpt}")
+            if not os.path.exists(config):
+                raise FileNotFoundError(f"Apollo config file not found: {config}")
+
+            enhanced_files = []
+            for output_file in normalized_outputs:
+                if output_file and os.path.exists(output_file):
+                    original_file_name = os.path.splitext(os.path.basename(output_file))[0]
+                    enhanced_output = os.path.join(OUTPUT_DIR, f"{original_file_name}_enhanced.{output_format}")
+
+                    try:
+                        if apollo_method == i18n("mid_side_method") and apollo_midside_model:
+                            # Mid/Side işleme
+                            audio, sr = librosa.load(output_file, mono=False, sr=None)
+                            if audio.ndim == 1:  # Mono ise stereo yap
+                                audio = np.array([audio, audio])
+
+                            mid = (audio[0] + audio[1]) * 0.5  # Merkez kanal
+                            side = (audio[0] - audio[1]) * 0.5  # Yan kanal
+
+                            mid_file = os.path.join(OUTPUT_DIR, "mid_temp.wav")
+                            side_file = os.path.join(OUTPUT_DIR, "side_temp.wav")
+                            sf.write(mid_file, mid, sr)
+                            sf.write(side_file, side, sr)
+
+                            # Mid için Apollo
+                            mid_output = os.path.join(OUTPUT_DIR, f"{original_file_name}_mid_enhanced.{output_format}")
+                            command_mid = [
+                                "python", apollo_script,
+                                "--in_wav", mid_file,
+                                "--out_wav", mid_output,
+                                "--chunk_size", str(chunk_size),
+                                "--overlap", str(overlap),
+                                "--ckpt", ckpt,
+                                "--config", config
+                            ]
+                            result_mid = subprocess.run(command_mid, capture_output=True, text=True)
+                            if result_mid.returncode != 0:
+                                print(f"Apollo Mid processing failed: {result_mid.stderr}")
+                                enhanced_files.append(output_file)
+                                continue
+
+                            # Side için Apollo
+                            side_output = os.path.join(OUTPUT_DIR, f"{original_file_name}_side_enhanced.{output_format}")
+                            if apollo_midside_model == "MP3 Enhancer":
+                                side_ckpt = "/content/Apollo/model/pytorch_model.bin"
+                                side_config = "/content/Apollo/configs/apollo.yaml"
+                            elif apollo_midside_model == "Lew Vocal Enhancer":
+                                side_ckpt = "/content/Apollo/model/apollo_model.ckpt"
+                                side_config = "/content/Apollo/configs/apollo.yaml"
+                            elif apollo_midside_model == "Lew Vocal Enhancer v2 (beta)":
+                                side_ckpt = "/content/Apollo/model/apollo_model_v2.ckpt"
+                                side_config = "/content/Apollo/configs/config_apollo_vocal.yaml"
+                            else:
+                                side_ckpt = "/content/Apollo/model/apollo_universal_model.ckpt"
+                                side_config = "/content/Apollo/configs/config_apollo.yaml"
+
+                            # Side model dosyalarının varlığını kontrol et
+                            if not os.path.exists(side_ckpt):
+                                print(f"Apollo Side checkpoint file not found: {side_ckpt}")
+                                enhanced_files.append(output_file)
+                                continue
+                            if not os.path.exists(side_config):
+                                print(f"Apollo Side config file not found: {side_config}")
+                                enhanced_files.append(output_file)
+                                continue
+
+                            command_side = [
+                                "python", apollo_script,
+                                "--in_wav", side_file,
+                                "--out_wav", side_output,
+                                "--chunk_size", str(chunk_size),
+                                "--overlap", str(overlap),
+                                "--ckpt", side_ckpt,
+                                "--config", side_config
+                            ]
+                            result_side = subprocess.run(command_side, capture_output=True, text=True)
+                            if result_side.returncode != 0:
+                                print(f"Apollo Side processing failed: {result_side.stderr}")
+                                enhanced_files.append(output_file)
+                                continue
+
+                            # Mid ve Side’ı birleştir
+                            mid_audio, _ = librosa.load(mid_output, sr=sr, mono=True)
+                            side_audio, _ = librosa.load(side_output, sr=sr, mono=True)
+                            left = mid_audio + side_audio
+                            right = mid_audio - side_audio
+                            combined = np.array([left, right])
+                            sf.write(enhanced_output, combined.T, sr)
+
+                            # Geçici dosyaları güvenli bir şekilde temizle
+                            for temp_file in [mid_file, side_file, mid_output, side_output]:
+                                try:
+                                    if os.path.exists(temp_file):
+                                        os.remove(temp_file)
+                                except Exception as e:
+                                    print(f"Failed to remove temporary file {temp_file}: {str(e)}")
+
+                            enhanced_files.append(enhanced_output)
+                        else:
+                            # Normal Apollo işlemi
+                            command = [
+                                "python", apollo_script,
+                                "--in_wav", output_file,
+                                "--out_wav", enhanced_output,
+                                "--chunk_size", str(chunk_size),
+                                "--overlap", str(overlap),
+                                "--ckpt", ckpt,
+                                "--config", config
+                            ]
+                            apollo_process = subprocess.Popen(
+                                command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True
+                            )
+                            for line in apollo_process.stdout:
+                                print(f"Apollo Enhancing {original_file_name}: {line.strip()}")
+                            apollo_process.wait()
+
+                            if apollo_process.returncode != 0:
+                                print(f"Apollo failed for {output_file}: {apollo_process.stdout.read()}")
+                                enhanced_files.append(output_file)
+                                continue
+
+                            enhanced_files.append(enhanced_output)
+                    except Exception as e:
+                        print(f"Error during Apollo processing for {output_file}: {str(e)}")
+                        enhanced_files.append(output_file)
+                        continue
+                else:
+                    enhanced_files.append(output_file)
+
+            return tuple(enhanced_files)
+
+        return tuple(normalized_outputs)
 
     except Exception as e:
         print(i18n("error_occurred").format(e))
@@ -242,8 +394,7 @@ def run_command_and_process_files(model_type, config_path, start_check_point, IN
     finally:
         progress(100, desc=i18n("separation_process_completed"))
 
-def process_audio(input_audio_file, model, chunk_size, overlap, export_format, use_tta, demud_phaseremix_inst, extract_instrumental, clean_model, progress=gr.Progress(track_tqdm=True), *args, **kwargs):
-    """Belirtilen modeli kullanarak sesi işler ve ayrılmış stem'leri ilerleme ile birlikte döndürür."""
+def process_audio(input_audio_file, model, chunk_size, overlap, export_format, use_tta, demud_phaseremix_inst, extract_instrumental, clean_model, use_apollo, apollo_chunk_size, apollo_overlap, apollo_method, apollo_normal_model, apollo_midside_model, progress=gr.Progress(track_tqdm=True), *args, **kwargs):
     try:
         if input_audio_file is not None:
             audio_path = input_audio_file.name
@@ -299,8 +450,19 @@ def process_audio(input_audio_file, model, chunk_size, overlap, export_format, u
             use_tta=use_tta,
             demud_phaseremix_inst=demud_phaseremix_inst,
             clean_model=clean_model_name_full,
-            progress=progress
+            progress=progress,
+            use_apollo=use_apollo,
+            apollo_normal_model=apollo_normal_model,
+            chunk_size=apollo_chunk_size,
+            overlap=apollo_overlap,
+            apollo_method=apollo_method,
+            apollo_midside_model=apollo_midside_model,
+            output_format=export_format.split()[0].lower()  # 'wav FLOAT' -> 'wav'
         )
+
+        # Çıktıların geçerliliğini kontrol et
+        if outputs is None or all(output is None for output in outputs):
+            raise ValueError("run_command_and_process_files returned None or all None outputs")
 
         for i in range(10, 91, 10):
             progress_html = """
@@ -334,6 +496,10 @@ def process_audio(input_audio_file, model, chunk_size, overlap, export_format, u
         )
 
     except Exception as e:
+        # Hata mesajını daha ayrıntılı logla
+        print(f"Error in process_audio: {str(e)}")
+        import traceback
+        traceback.print_exc()
         progress_html = """
         <div id="custom-progress" style="margin-top: 10px;">
             <div style="font-size: 1rem; color: #C0C0C0; margin-bottom: 5px;" id="progress-label">{}</div>
