@@ -53,6 +53,26 @@ def download_file(url):
 # Model konfigurasyonlarını kategorize bir sözlükte tut
 MODEL_CONFIGS = {
     "Vocal Models": {
+        'VOCALS-big_beta6X (by Unwa)': {
+            'model_type': 'mdx23c',
+            'config_path': os.path.join(CHECKPOINT_DIR, 'big_beta6x.yaml'),
+            'start_check_point': os.path.join(CHECKPOINT_DIR, 'big_beta6x.ckpt'),
+            'download_urls': [
+                'https://huggingface.co/pcunwa/Mel-Band-Roformer-big/resolve/main/big_beta6x.yaml',
+                'https://huggingface.co/pcunwa/Mel-Band-Roformer-big/resolve/main/big_beta6x.ckpt'
+            ],
+            'needs_conf_edit': False
+        },
+        'VOCALS-big_beta6 (by Unwa)': {
+            'model_type': 'mdx23c',
+            'config_path': os.path.join(CHECKPOINT_DIR, 'big_beta6.yaml'),
+            'start_check_point': os.path.join(CHECKPOINT_DIR, 'big_beta6.ckpt'),
+            'download_urls': [
+                'https://huggingface.co/pcunwa/Mel-Band-Roformer-big/resolve/main/big_beta6.yaml',
+                'https://huggingface.co/pcunwa/Mel-Band-Roformer-big/resolve/main/big_beta6.ckpt'
+            ],
+            'needs_conf_edit': False
+        },
         'VOCALS-InstVocHQ': {
             'model_type': 'mdx23c',
             'config_path': os.path.join(CHECKPOINT_DIR, 'config_vocals_mdx23c.yaml'),
