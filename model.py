@@ -54,7 +54,7 @@ def download_file(url):
 MODEL_CONFIGS = {
     "Vocal Models": {
         'VOCALS-big_beta6X (by Unwa)': {
-            'model_type': 'mdx23c',
+            'model_type': 'mel_band_roformer',
             'config_path': os.path.join(CHECKPOINT_DIR, 'big_beta6x.yaml'),
             'start_check_point': os.path.join(CHECKPOINT_DIR, 'big_beta6x.ckpt'),
             'download_urls': [
@@ -64,7 +64,7 @@ MODEL_CONFIGS = {
             'needs_conf_edit': False
         },
         'VOCALS-big_beta6 (by Unwa)': {
-            'model_type': 'mdx23c',
+            'model_type': 'mel_band_roformer',
             'config_path': os.path.join(CHECKPOINT_DIR, 'big_beta6.yaml'),
             'start_check_point': os.path.join(CHECKPOINT_DIR, 'big_beta6.ckpt'),
             'download_urls': [
@@ -74,7 +74,7 @@ MODEL_CONFIGS = {
             'needs_conf_edit': False
         },
         'VOCALS-Mel-Roformer FT 3 Preview (by unwa)': {
-            'model_type': 'mdx23c',
+            'model_type': 'mel_band_roformer',
             'config_path': os.path.join(CHECKPOINT_DIR, 'config_kimmel_unwa_ft.yaml'),
             'start_check_point': os.path.join(CHECKPOINT_DIR, 'kimmel_unwa_ft3_prev.ckpt'),
             'download_urls': [
@@ -663,6 +663,16 @@ MODEL_CONFIGS = {
         }
     },
     "Karaoke": {
+        'KARAOKE-MelBand-Roformer (by aufr33 & viperx)': {
+            'model_type': 'mel_band_roformer',
+            'config_path': os.path.join(CHECKPOINT_DIR, 'config_mel_band_roformer_karaoke.yaml'),
+            'start_check_point': os.path.join(CHECKPOINT_DIR, 'mel_band_roformer_karaoke_aufr33_viperx_sdr_10.1956.ckpt'),
+            'download_urls': [
+                'https://huggingface.co/jarredou/aufr33-viperx-karaoke-melroformer-model/resolve/main/mel_band_roformer_karaoke_aufr33_viperx_sdr_10.1956.ckpt',
+                'https://huggingface.co/jarredou/aufr33-viperx-karaoke-melroformer-model/resolve/main/config_mel_band_roformer_karaoke.yaml'
+            ],
+            'needs_conf_edit': True
+        },
         'KaraokeGabox': {
             'model_type': 'mel_band_roformer',
             'config_path': os.path.join(CHECKPOINT_DIR, 'config_mel_band_roformer_karaoke.yaml'),
@@ -675,16 +685,6 @@ MODEL_CONFIGS = {
         }
     },   
     "Other Models": {
-        'KARAOKE-MelBand-Roformer (by aufr33 & viperx)': {
-            'model_type': 'mel_band_roformer',
-            'config_path': os.path.join(CHECKPOINT_DIR, 'config_mel_band_roformer_karaoke.yaml'),
-            'start_check_point': os.path.join(CHECKPOINT_DIR, 'mel_band_roformer_karaoke_aufr33_viperx_sdr_10.1956.ckpt'),
-            'download_urls': [
-                'https://huggingface.co/jarredou/aufr33-viperx-karaoke-melroformer-model/resolve/main/mel_band_roformer_karaoke_aufr33_viperx_sdr_10.1956.ckpt',
-                'https://huggingface.co/jarredou/aufr33-viperx-karaoke-melroformer-model/resolve/main/config_mel_band_roformer_karaoke.yaml'
-            ],
-            'needs_conf_edit': True
-        },
         'OTHER-BS-Roformer_1053 (by viperx)': {
             'model_type': 'bs_roformer',
             'config_path': os.path.join(CHECKPOINT_DIR, 'model_bs_roformer_ep_937_sdr_10.5309.yaml'),
@@ -714,6 +714,16 @@ MODEL_CONFIGS = {
                 'https://github.com/ZFTurbo/Music-Source-Separation-Training/releases/download/v.1.0.3/model_bandit_plus_dnr_sdr_11.47.chpt'
             ],
             'needs_conf_edit': False
+        },
+        'CINEMATIC-BandIt_v2 multi (by kwatcharasupat)': {
+            'model_type': 'bandit_v2',
+            'config_path': os.path.join(CHECKPOINT_DIR, 'config_dnr_bandit_v2_mus64.yaml'),
+            'start_check_point': os.path.join(CHECKPOINT_DIR, 'checkpoint-multi_state_dict.ckpt'),
+            'download_urls': [
+                'https://huggingface.co/jarredou/banditv2_state_dicts_only/resolve/main/checkpoint-multi_state_dict.ckpt',
+                'https://raw.githubusercontent.com/ZFTurbo/Music-Source-Separation-Training/refs/heads/main/configs/config_dnr_bandit_v2_mus64.yaml'
+            ],
+            'needs_conf_edit': True
         },
         'DRUMSEP-MDX23C_DrumSep_6stem (by aufr33 & jarredou)': {
             'model_type': 'mdx23c',
