@@ -181,33 +181,52 @@ def create_interface():
                                 )
 
                         with gr.Accordion(i18n("settings"), open=False) as settings_accordion:
+                            # Row 1: Format and Chunk Size side by side
                             with gr.Row():
-                                export_format = gr.Dropdown(
-                                    label=i18n("format"),
-                                    choices=['wav FLOAT', 'flac PCM_16', 'flac PCM_24'],
-                                    value='wav FLOAT'
-                                )
-                                chunk_size = gr.Dropdown(
-                                    label=i18n("chunk_size"),
-                                    choices=[352800, 485100],
-                                    value=352800,
-                                    info=i18n("chunk_size_info")
-                                )
+                                with gr.Column(scale=1):
+                                    export_format = gr.Dropdown(
+                                        label=i18n("format"),
+                                        choices=['wav FLOAT', 'flac PCM_16', 'flac PCM_24'],
+                                        value='wav FLOAT'
+                                    )
+                                with gr.Column(scale=1):
+                                    chunk_size = gr.Dropdown(
+                                        label=i18n("chunk_size"),
+                                        choices=[352800, 485100],
+                                        value=352800,
+                                        info=i18n("chunk_size_info")
+                                    )
+
+                            # Row 2: Overlap Slider and TTA Checkbox
+
+                                with gr.Row():
+                                    overlap_info = gr.Markdown(i18n("overlap_info"))
 
                             with gr.Row():
-                                overlap = gr.Slider(2, 50, step=1, label=i18n("overlap"), value=2)
-                                overlap_info = gr.Markdown(i18n("overlap_info"))
-                                use_tta = gr.Checkbox(label=i18n("tta_boost"))
+                                with gr.Column(scale=2):
+                                    overlap = gr.Slider(2, 50, step=1, label=i18n("overlap"), value=2)
+
+                                with gr.Column(scale=1):
+                                    use_tta = gr.Checkbox(label=i18n("tta_boost"))
+
+                            # Row 4: Phase Fix and Instrumental Checkboxes
+
+                                with gr.Row():
+                                    phase_fix_info = gr.Markdown(i18n("phase_fix_info")) 
 
                             with gr.Row():
-                                use_demud_phaseremix_inst = gr.Checkbox(label=i18n("phase_fix"))
-                                phase_fix_info = gr.Markdown(i18n("phase_fix_info"))
-                                extract_instrumental = gr.Checkbox(label=i18n("instrumental"))
+                                with gr.Column(scale=1):
+                                    use_demud_phaseremix_inst = gr.Checkbox(label=i18n("phase_fix"))
 
-                            with gr.Row():
-                                process_btn = gr.Button(i18n("process"), variant="primary")
-                                clear_old_output_btn = gr.Button(i18n("reset"), variant="secondary")
-                                clear_old_output_status = gr.Textbox(label=i18n("status"), interactive=False)
+                                       
+                                with gr.Column(scale=1):
+                                    extract_instrumental = gr.Checkbox(label=i18n("instrumental"))
+
+                        # Buttons outside the accordion
+                        with gr.Row():
+                            process_btn = gr.Button(i18n("process"), variant="primary")
+                            clear_old_output_btn = gr.Button(i18n("reset"), variant="secondary")
+                        clear_old_output_status = gr.Textbox(label=i18n("status"), interactive=False)
 
                     with gr.Column(scale=2, min_width=800):
                         with gr.Tabs():
