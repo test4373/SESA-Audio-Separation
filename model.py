@@ -245,6 +245,16 @@ MODEL_CONFIGS = {
         }
     },
     "Instrumental Models": {
+        'Inst_GaboxFv8 (by Gabox)': {
+            'model_type': 'mel_band_roformer',
+            'config_path': os.path.join(CHECKPOINT_DIR, 'inst_gabox.yaml'),
+            'start_check_point': os.path.join(CHECKPOINT_DIR, 'Inst_GaboxFv8.ckpt'),
+            'download_urls': [
+                'https://huggingface.co/GaboxR67/MelBandRoformers/resolve/main/melbandroformers/instrumental/Inst_GaboxFv8.ckpt',
+                'https://huggingface.co/GaboxR67/MelBandRoformers/resolve/main/melbandroformers/instrumental/inst_gabox.yaml'
+            ],
+            'needs_conf_edit': True
+        },   
         'INST-Mel-Roformer v1 (by unwa)': {
             'model_type': 'mel_band_roformer',
             'config_path': os.path.join(CHECKPOINT_DIR, 'config_melbandroformer_inst.yaml'),
