@@ -153,7 +153,7 @@ def create_interface():
 
         header_html = gr.HTML(
             value=f"""
-            <div class="header-text">{i18n("gecekondu_production")}</div>
+            <div class="header-text">{i18n("SESA Audio Separation")}</div>
             <div class="header-subtitle">{i18n("ultimate_audio_separation")}</div>
             """
         )
@@ -613,15 +613,6 @@ def create_interface():
                                 size="sm",
                                 elem_id="process-btn"
                             )
-
-        footer_html = gr.HTML(
-            value=f"""
-            <div class="footer">
-                <div>{i18n("presented_by")}</div>
-                <div style="margin-top: 10px;"></div>
-            </div>
-            """
-        )
 
         # Event handlers
         model_category.change(fn=update_model_dropdown, inputs=model_category, outputs=model_dropdown)
