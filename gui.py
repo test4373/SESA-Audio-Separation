@@ -208,7 +208,7 @@ def create_interface():
                                         step=1,
                                         label=i18n("overlap"),
                                         value=2,
-                                        info=i18n("overlap_info")  # Bu zaten doğru, ancak görünmüyorsa aşağıda Markdown ile ekleyeceğiz
+                                        info=i18n("overlap_info")
                                     )
 
                             with gr.Row():
@@ -239,7 +239,6 @@ def create_interface():
                                     info=i18n("apollo_enhancement_info")
                                 )
 
-                            # Apollo ayarlarını tek bir grup altında topluyoruz
                             with gr.Group(visible=False) as apollo_settings_group:
                                 with gr.Row():
                                     with gr.Column(scale=1):
@@ -398,6 +397,61 @@ def create_interface():
                                     value='wav FLOAT'
                                 )
 
+                            # Apollo ayarları Auto Ensemble için
+                            with gr.Row():
+                                auto_use_apollo = gr.Checkbox(
+                                    label=i18n("enhance_with_apollo"),
+                                    value=False,
+                                    info=i18n("apollo_enhancement_info")
+                                )
+
+                            with gr.Group(visible=False) as auto_apollo_settings_group:
+                                with gr.Row():
+                                    with gr.Column(scale=1):
+                                        auto_apollo_chunk_size = gr.Slider(
+                                            label=i18n("apollo_chunk_size"),
+                                            minimum=3,
+                                            maximum=25,
+                                            step=1,
+                                            value=19,
+                                            info=i18n("apollo_chunk_size_info"),
+                                            interactive=True
+                                        )
+                                    with gr.Column(scale=1):
+                                        auto_apollo_overlap = gr.Slider(
+                                            label=i18n("apollo_overlap"),
+                                            minimum=2,
+                                            maximum=10,
+                                            step=1,
+                                            value=2,
+                                            info=i18n("apollo_overlap_info"),
+                                            interactive=True
+                                        )
+
+                                with gr.Row():
+                                    auto_apollo_method = gr.Dropdown(
+                                        label=i18n("apollo_processing_method"),
+                                        choices=[i18n("normal_method"), i18n("mid_side_method")],
+                                        value=i18n("normal_method"),
+                                        interactive=True
+                                    )
+
+                                with gr.Row(visible=True) as auto_apollo_normal_model_row:
+                                    auto_apollo_normal_model = gr.Dropdown(
+                                        label=i18n("apollo_normal_model"),
+                                        choices=["MP3 Enhancer", "Lew Vocal Enhancer", "Lew Vocal Enhancer v2 (beta)", "Apollo Universal Model"],
+                                        value="Apollo Universal Model",
+                                        interactive=True
+                                    )
+
+                                with gr.Row(visible=False) as auto_apollo_midside_model_row:
+                                    auto_apollo_midside_model = gr.Dropdown(
+                                        label=i18n("apollo_mid_side_model"),
+                                        choices=["MP3 Enhancer", "Lew Vocal Enhancer", "Lew Vocal Enhancer v2 (beta)", "Apollo Universal Model"],
+                                        value="Apollo Universal Model",
+                                        interactive=True
+                                    )
+
                         with gr.Group():
                             model_selection_header = gr.Markdown(f"### {i18n('model_selection')}")
                             with gr.Row():
@@ -428,6 +482,20 @@ def create_interface():
                             ensemble_recommendation = gr.Markdown(i18n("recommendation"))
 
                         auto_process_btn = gr.Button(i18n("start_processing"), variant="primary")
+
+                        # Apollo ayarlarının görünürlüğünü kontrol eden event
+                        auto_use_apollo.change(
+                            fn=lambda x: gr.update(visible=x),
+                            inputs=auto_use_apollo,
+                            outputs=auto_apollo_settings_group
+                        )
+
+                        # Mid/Side model dropdown’ını kontrol eden event
+                        auto_apollo_method.change(
+                            fn=lambda x: [gr.update(visible=x != i18n("mid_side_method")), gr.update(visible=x == i18n("mid_side_method"))],
+                            inputs=auto_apollo_method,
+                            outputs=[auto_apollo_normal_model_row, auto_apollo_midside_model_row]
+                        )
 
                     with gr.Column():
                         with gr.Tabs():
@@ -602,8 +670,21 @@ def create_interface():
         auto_process_btn.click(
             fn=auto_ensemble_process,
             inputs=[
-                auto_input_audio_file, selected_models, auto_chunk_size, auto_overlap, export_format2,
-                auto_use_tta, auto_extract_instrumental, auto_ensemble_type, gr.State(None)
+                auto_input_audio_file,           # auto_input_audio_file
+                selected_models,                 # selected_models
+                auto_chunk_size,                 # auto_chunk_size
+                auto_overlap,                    # auto_overlap
+                export_format2,                  # export_format
+                auto_use_tta,                    # auto_use_tta
+                auto_extract_instrumental,       # auto_extract_instrumental
+                auto_ensemble_type,              # auto_ensemble_type
+                gr.State(None),                  # _state
+                auto_use_apollo,                 # auto_use_apollo
+                auto_apollo_normal_model,        # auto_apollo_normal_model (moved up)
+                auto_apollo_chunk_size,          # auto_apollo_chunk_size
+                auto_apollo_overlap,             # auto_apollo_overlap
+                auto_apollo_method,              # auto_apollo_method
+                auto_apollo_midside_model        # auto_apollo_midside_model
             ],
             outputs=[auto_output_audio, ensemble_process_status, ensemble_progress_html]
         )
