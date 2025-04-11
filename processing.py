@@ -585,7 +585,22 @@ def auto_ensemble_process(
     **kwargs
 ):
     """Birden fazla modelle sesi işler, Apollo ile kalite artırır ve ensemble işlemini gerçekleştirir."""
+    import os
+    import glob
+    import subprocess
+    import time
+    import gc
+    import shutil
+    import librosa
+    import soundfile as sf
+    import numpy as np
+    import psutil
+    import torch
+    from tqdm import tqdm
+    from scipy.signal import correlate, butter, sosfilt  # Added butter and sosfilt for high-pass filter
+
     try:
+        # Validate inputs
         if not selected_models or len(selected_models) < 1:
             return None, i18n("no_models_selected"), "<div></div>"
 
@@ -597,17 +612,25 @@ def auto_ensemble_process(
         else:
             audio_path = auto_input_audio_file.name if hasattr(auto_input_audio_file, 'name') else auto_input_audio_file
 
+        # Setup directories
         auto_ensemble_temp = os.path.join(BASE_DIR, "auto_ensemble_temp")
         os.makedirs(auto_ensemble_temp, exist_ok=True)
         os.makedirs(AUTO_ENSEMBLE_OUTPUT, exist_ok=True)
         clear_directory(auto_ensemble_temp)
         clear_directory(AUTO_ENSEMBLE_OUTPUT)
 
+        # Load original audio and its sample rate
+        try:
+            original_audio, original_sr = librosa.load(audio_path, sr=None, mono=False)
+            print(f"Original audio sample rate: {original_sr} Hz, shape: {original_audio.shape}")
+        except Exception as e:
+            raise ValueError(i18n("failed_to_load_input_audio").format(audio_path, str(e)))
+
         all_outputs = []
         total_models = len(selected_models)
         model_progress_per_step = 60 / total_models
 
-        # 1. Adım: Her modelle ses ayrımı yap
+        # Step 1: Process audio with each model
         for i, model in enumerate(selected_models):
             clean_model = extract_model_name(model)
             model_output_dir = os.path.join(auto_ensemble_temp, clean_model)
@@ -627,7 +650,7 @@ def auto_ensemble_process(
             model_type, config_path, start_check_point = get_model_config(clean_model, auto_chunk_size, auto_overlap)
 
             cmd = [
-                "python", INFERENCE_PATH,
+                sys.executable, INFERENCE_PATH,
                 "--model_type", model_type,
                 "--config_path", config_path,
                 "--start_check_point", start_check_point,
@@ -640,11 +663,44 @@ def auto_ensemble_process(
                 cmd.append("--extract_instrumental")
 
             print(i18n("running_command").format(' '.join(cmd)))
-            result = subprocess.run(cmd, capture_output=True, text=True)
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                check=True
+            )
             print(result.stdout)
             if result.returncode != 0:
                 print(i18n("error").format(result.stderr))
                 return None, i18n("model_failed").format(model, result.stderr), "<div></div>"
+
+            # Resample model outputs to match original sample rate
+            model_outputs = glob.glob(os.path.join(model_output_dir, "*.wav"))
+            if not model_outputs:
+                raise FileNotFoundError(i18n("model_output_failed").format(model))
+
+            resampled_outputs = []
+            for output_file in model_outputs:
+                try:
+                    audio, sr = librosa.load(output_file, sr=None, mono=False)
+                    print(f"Model output {output_file} sample rate: {sr} Hz, shape: {audio.shape}")
+                    if sr != original_sr:
+                        print(f"Resampling {output_file} from {sr} Hz to {original_sr} Hz")
+                        audio = librosa.resample(audio, orig_sr=sr, target_sr=original_sr)
+                        # Ensure the resampled audio matches the original audio's length
+                        if audio.shape[-1] != original_audio.shape[-1]:
+                            print(f"Adjusting length of {output_file} from {audio.shape[-1]} to {original_audio.shape[-1]}")
+                            if audio.shape[-1] > original_audio.shape[-1]:
+                                audio = audio[:, :original_audio.shape[-1]]
+                            else:
+                                audio = np.pad(audio, ((0, 0), (0, original_audio.shape[-1] - audio.shape[-1])), mode='constant')
+                        sf.write(output_file, audio.T if audio.ndim == 2 else audio, original_sr)
+                    resampled_outputs.append(output_file)
+                except Exception as e:
+                    print(f"Failed to process {output_file}: {e}")
+                    continue
+
+            all_outputs.extend(resampled_outputs)
 
             gc.collect()
             if torch.cuda.is_available():
@@ -661,12 +717,7 @@ def auto_ensemble_process(
             """.format(i18n("completed_model_progress_label").format(i+1, total_models, clean_model, current_progress), current_progress)
             yield None, i18n("completed_model").format(i+1, total_models, clean_model), progress_html
 
-            model_outputs = glob.glob(os.path.join(model_output_dir, "*.wav"))
-            if not model_outputs:
-                raise FileNotFoundError(i18n("model_output_failed").format(model))
-            all_outputs.extend(model_outputs)
-
-        # 2. Adım: Apollo ile kalite artırma
+        # Step 2: Enhance with Apollo
         enhanced_outputs = []
         if auto_use_apollo:
             apollo_script = "/content/Apollo/inference.py"
@@ -681,7 +732,7 @@ def auto_ensemble_process(
             """.format(i18n("starting_apollo_enhancement_progress_label"))
             yield None, i18n("starting_apollo_enhancement"), progress_html
 
-            # Apollo model seçimleri
+            # Apollo model selection
             if auto_apollo_method == i18n("normal_method"):
                 if auto_apollo_normal_model == "MP3 Enhancer":
                     ckpt = "/content/Apollo/model/pytorch_model.bin"
@@ -709,16 +760,20 @@ def auto_ensemble_process(
                     ckpt = "/content/Apollo/model/apollo_universal_model.ckpt"
                     config = "/content/Apollo/configs/config_apollo.yaml"
 
-            # Model dosyalarını kontrol et
+            # Verify Apollo model files
             if not os.path.exists(ckpt):
                 raise FileNotFoundError(f"Apollo checkpoint file not found: {ckpt}")
             if not os.path.exists(config):
                 raise FileNotFoundError(f"Apollo config file not found: {config}")
 
             total_outputs = len(all_outputs)
-            apollo_progress_per_file = 30 / total_outputs
+            apollo_progress_per_file = 30 / total_outputs if total_outputs > 0 else 30
 
             for idx, output_file in enumerate(all_outputs):
+                if not os.path.exists(output_file):
+                    print(f"Skipping missing file: {output_file}")
+                    continue
+
                 original_file_name = os.path.splitext(os.path.basename(output_file))[0]
                 enhanced_output = os.path.join(auto_ensemble_temp, f"{original_file_name}_enhanced.wav")
 
@@ -735,23 +790,34 @@ def auto_ensemble_process(
 
                 MID_SIDE_METHOD = i18n("mid_side_method")
                 if auto_apollo_method == MID_SIDE_METHOD and auto_apollo_midside_model:
-                    # Mid/Side işleme
+                    # Mid/Side processing
                     audio, sr = librosa.load(output_file, mono=False, sr=None)
-                    if audio.ndim == 1:  # Mono ise stereo yap
-                        audio = np.array([audio, audio])
+                    print(f"Apollo input {output_file} sample rate: {sr} Hz")
+                    if sr != original_sr:
+                        print(f"Resampling Apollo input {output_file} from {sr} Hz to {original_sr} Hz")
+                        audio = librosa.resample(audio, orig_sr=sr, target_sr=original_sr)
+                        sr = original_sr
+                        # Ensure length matches original audio
+                        if audio.shape[-1] != original_audio.shape[-1]:
+                            print(f"Adjusting Apollo input length from {audio.shape[-1]} to {original_audio.shape[-1]}")
+                            if audio.shape[-1] > original_audio.shape[-1]:
+                                audio = audio[:, :original_audio.shape[-1]]
+                            else:
+                                audio = np.pad(audio, ((0, 0), (0, original_audio.shape[-1] - audio.shape[-1])), mode='constant')
+                        sf.write(output_file, audio.T if audio.ndim == 2 else audio, sr)
 
-                    mid = (audio[0] + audio[1]) * 0.5  # Merkez kanal
-                    side = (audio[0] - audio[1]) * 0.5  # Yan kanal
+                    mid = (audio[0] + audio[1]) * 0.5  # Center channel
+                    side = (audio[0] - audio[1]) * 0.5  # Side channel
 
                     mid_file = os.path.join(auto_ensemble_temp, "mid_temp.wav")
                     side_file = os.path.join(auto_ensemble_temp, "side_temp.wav")
                     sf.write(mid_file, mid, sr)
                     sf.write(side_file, side, sr)
 
-                    # Mid için Apollo
+                    # Mid Apollo
                     mid_output = os.path.join(auto_ensemble_temp, f"{original_file_name}_mid_enhanced.wav")
                     command_mid = [
-                        "python", apollo_script,
+                        sys.executable, apollo_script,
                         "--in_wav", mid_file,
                         "--out_wav", mid_output,
                         "--ckpt", ckpt,
@@ -760,13 +826,10 @@ def auto_ensemble_process(
                         "--overlap", str(auto_apollo_overlap)
                     ]
                     print(f"Running Mid Apollo command: {' '.join(command_mid)}")
-                    result_mid = subprocess.run(command_mid, capture_output=True, text=True)
-                    if result_mid.returncode != 0:
-                        print(f"Apollo Mid processing failed: {result_mid.stderr}")
-                        enhanced_outputs.append(output_file)
-                        continue
+                    result_mid = subprocess.run(command_mid, capture_output=True, text=True, check=True)
+                    print(f"Mid Apollo stdout: {result_mid.stdout}")
 
-                    # Side için Apollo
+                    # Side Apollo
                     side_output = os.path.join(auto_ensemble_temp, f"{original_file_name}_side_enhanced.wav")
                     if auto_apollo_midside_model == "MP3 Enhancer":
                         side_ckpt = "/content/Apollo/model/pytorch_model.bin"
@@ -787,7 +850,7 @@ def auto_ensemble_process(
                         continue
 
                     command_side = [
-                        "python", apollo_script,
+                        sys.executable, apollo_script,
                         "--in_wav", side_file,
                         "--out_wav", side_output,
                         "--ckpt", side_ckpt,
@@ -796,30 +859,59 @@ def auto_ensemble_process(
                         "--overlap", str(auto_apollo_overlap)
                     ]
                     print(f"Running Side Apollo command: {' '.join(command_side)}")
-                    result_side = subprocess.run(command_side, capture_output=True, text=True)
-                    if result_side.returncode != 0:
-                        print(f"Apollo Side processing failed: {result_side.stderr}")
-                        enhanced_outputs.append(output_file)
-                        continue
+                    result_side = subprocess.run(command_side, capture_output=True, text=True, check=True)
+                    print(f"Side Apollo stdout: {result_side.stdout}")
 
-                    # Mid ve Side’ı birleştir
-                    mid_audio, _ = librosa.load(mid_output, sr=sr, mono=True)
-                    side_audio, _ = librosa.load(side_output, sr=sr, mono=True)
+                    # Combine Mid and Side
+                    mid_audio, mid_sr = librosa.load(mid_output, sr=None, mono=True)
+                    side_audio, side_sr = librosa.load(side_output, sr=None, mono=True)
+                    print(f"Mid output sample rate: {mid_sr} Hz, Side output sample rate: {side_sr} Hz")
+                    if mid_sr != original_sr:
+                        print(f"Resampling mid output from {mid_sr} Hz to {original_sr} Hz")
+                        mid_audio = librosa.resample(mid_audio, orig_sr=mid_sr, target_sr=original_sr)
+                    if side_sr != original_sr:
+                        print(f"Resampling side output from {side_sr} Hz to {original_sr} Hz")
+                        side_audio = librosa.resample(side_audio, orig_sr=side_sr, target_sr=original_sr)
+
+                    # Ensure mid and side lengths match original audio
+                    for audio_part in [mid_audio, side_audio]:
+                        if len(audio_part) != original_audio.shape[-1]:
+                            print(f"Adjusting Apollo mid/side length from {len(audio_part)} to {original_audio.shape[-1]}")
+                            if len(audio_part) > original_audio.shape[-1]:
+                                audio_part = audio_part[:original_audio.shape[-1]]
+                            else:
+                                audio_part = np.pad(audio_part, (0, original_audio.shape[-1] - len(audio_part)), mode='constant')
+
                     left = mid_audio + side_audio
                     right = mid_audio - side_audio
                     combined = np.array([left, right])
-                    sf.write(enhanced_output, combined.T, sr)
+                    sf.write(enhanced_output, combined.T, original_sr)
 
-                    # Geçici dosyaları temizle
+                    # Clean up temporary files
                     for temp_file in [mid_file, side_file, mid_output, side_output]:
                         if os.path.exists(temp_file):
                             os.remove(temp_file)
 
                     enhanced_outputs.append(enhanced_output)
                 else:
-                    # Normal Apollo işlemi
+                    # Normal Apollo processing
+                    audio, sr = librosa.load(output_file, mono=False, sr=None)
+                    print(f"Apollo input {output_file} sample rate: {sr} Hz")
+                    if sr != original_sr:
+                        print(f"Resampling Apollo input {output_file} from {sr} Hz to {original_sr} Hz")
+                        audio = librosa.resample(audio, orig_sr=sr, target_sr=original_sr)
+                        sr = original_sr
+                        # Ensure length matches original audio
+                        if audio.shape[-1] != original_audio.shape[-1]:
+                            print(f"Adjusting Apollo input length from {audio.shape[-1]} to {original_audio.shape[-1]}")
+                            if audio.shape[-1] > original_audio.shape[-1]:
+                                audio = audio[:, :original_audio.shape[-1]]
+                            else:
+                                audio = np.pad(audio, ((0, 0), (0, original_audio.shape[-1] - audio.shape[-1])), mode='constant')
+                        sf.write(output_file, audio.T if audio.ndim == 2 else audio, sr)
+
                     command = [
-                        "python", apollo_script,
+                        sys.executable, apollo_script,
                         "--in_wav", output_file,
                         "--out_wav", enhanced_output,
                         "--ckpt", ckpt,
@@ -829,24 +921,41 @@ def auto_ensemble_process(
                     ]
                     print(f"Running Normal Apollo command: {' '.join(command)}")
                     apollo_process = subprocess.Popen(
-                        command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True
+                        command,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                        text=True
                     )
-                    stdout_output = ""
-                    for line in apollo_process.stdout:
-                        print(f"Apollo Enhancing {original_file_name}: {line.strip()}")
-                        stdout_output += line
-                    apollo_process.wait()
-
+                    stdout_output, stderr_output = apollo_process.communicate()
+                    print(f"Apollo stdout: {stdout_output}")
                     if apollo_process.returncode != 0:
-                        print(f"Apollo failed for {output_file}: {stdout_output}")
+                        print(f"Apollo failed for {output_file}: {stderr_output}")
                         enhanced_outputs.append(output_file)
                         continue
 
+                    # Resample Apollo output if necessary
+                    enhanced_audio, enhanced_sr = librosa.load(enhanced_output, sr=None, mono=False)
+                    print(f"Apollo output {enhanced_output} sample rate: {enhanced_sr} Hz")
+                    if enhanced_sr != original_sr:
+                        print(f"Resampling Apollo output {enhanced_output} from {enhanced_sr} Hz to {original_sr} Hz")
+                        enhanced_audio = librosa.resample(enhanced_audio, orig_sr=enhanced_sr, target_sr=original_sr)
+                        # Ensure length matches original audio
+                        if enhanced_audio.shape[-1] != original_audio.shape[-1]:
+                            print(f"Adjusting Apollo output length from {enhanced_audio.shape[-1]} to {original_audio.shape[-1]}")
+                            if enhanced_audio.shape[-1] > original_audio.shape[-1]:
+                                enhanced_audio = enhanced_audio[:, :original_audio.shape[-1]]
+                            else:
+                                enhanced_audio = np.pad(enhanced_audio, ((0, 0), (0, original_audio.shape[-1] - enhanced_audio.shape[-1])), mode='constant')
+                        sf.write(enhanced_output, enhanced_audio.T if enhanced_audio.ndim == 2 else enhanced_audio, original_sr)
+
                     enhanced_outputs.append(enhanced_output)
 
-            all_outputs = enhanced_outputs  # Apollo sonrası çıktıları ensemble’a gönder
+            all_outputs = enhanced_outputs  # Use enhanced outputs for ensemble
 
-        # 3. Adım: Ensemble işlemi
+        # Step 3: Ensemble processing
+        if not all_outputs or len(all_outputs) < 1:
+            raise ValueError(i18n("no_valid_outputs_for_ensemble"))
+
         progress_html = """
         <div id="custom-progress" style="margin-top: 10px;">
             <div style="font-size: 1rem; color: #C0C0C0; margin-bottom: 5px;" id="progress-label">{}</div>
@@ -857,40 +966,202 @@ def auto_ensemble_process(
         """.format(i18n("performing_ensemble_progress_label"))
         yield None, i18n("performing_ensemble"), progress_html
 
-        quoted_files = [f'"{f}"' for f in all_outputs]
+        # Verify sample rates and lengths before ensembling
+        print("Verifying sample rates and lengths of ensemble inputs:")
+        valid_outputs = []
+        for f in all_outputs:
+            if os.path.exists(f):
+                wav, sr = librosa.load(f, sr=None, mono=False)
+                print(f"File: {f}, Sample Rate: {sr}, Shape: {wav.shape}")
+                if sr != original_sr:
+                    print(f"Resampling {f} from {sr} Hz to {original_sr} Hz")
+                    wav = librosa.resample(wav, orig_sr=sr, target_sr=original_sr)
+                # Ensure length matches original audio
+                if wav.shape[-1] != original_audio.shape[-1]:
+                    print(f"Adjusting ensemble input length from {wav.shape[-1]} to {original_audio.shape[-1]}")
+                    if wav.shape[-1] > original_audio.shape[-1]:
+                        wav = wav[:, :original_audio.shape[-1]]
+                    else:
+                        wav = np.pad(wav, ((0, 0), (0, original_audio.shape[-1] - wav.shape[-1])), mode='constant')
+                    sf.write(f, wav.T if wav.ndim == 2 else wav, original_sr)
+                valid_outputs.append(f)
+            else:
+                print(f"File missing: {f}")
+
+        if not valid_outputs:
+            raise FileNotFoundError(i18n("no_valid_ensemble_inputs"))
+
         timestamp = str(int(time.time()))
         output_path = os.path.join(AUTO_ENSEMBLE_OUTPUT, f"ensemble_{timestamp}.wav")
 
         ensemble_cmd = [
-            "python", ENSEMBLE_PATH,
-            "--files", *quoted_files,
+            sys.executable, ENSEMBLE_PATH,
+            "--files"
+        ] + valid_outputs + [
             "--type", auto_ensemble_type,
-            "--output", f'"{output_path}"'
+            "--output", output_path
         ]
 
         print(i18n("memory_usage_before_ensemble").format(psutil.virtual_memory().percent))
         print(f"Running Ensemble command: {' '.join(ensemble_cmd)}")
-        result = subprocess.run(
-            " ".join(ensemble_cmd),
-            shell=True,
-            capture_output=True,
-            text=True,
-            check=True
-        )
-        print(i18n("memory_usage_after_ensemble").format(psutil.virtual_memory().percent))
+        try:
+            result = subprocess.run(
+                ensemble_cmd,
+                capture_output=True,
+                text=True,
+                check=True
+            )
+            print(f"Ensemble stdout: {result.stdout}")
+        except subprocess.CalledProcessError as e:
+            print(f"Ensemble failed: {e.stderr}")
+            raise RuntimeError(i18n("ensemble_failed").format(e.stderr))
 
-        progress_html = """
-        <div id="custom-progress" style="margin-top: 10px;">
-            <div style="font-size: 1rem; color: #C0C0C0; margin-bottom: 5px;" id="progress-label">{}</div>
-            <div style="width: 100%; background-color: #444; border-radius: 5px; overflow: hidden;">
-                <div id="progress-bar" style="width: 98%; height: 20px; background-color: #6e8efb; transition: width 0.3s;"></div>
-            </div>
-        </div>
-        """.format(i18n("finalizing_ensemble_output_progress_label"))
-        yield None, i18n("finalizing_ensemble_output"), progress_html
+        print(i18n("memory_usage_after_ensemble").format(psutil.virtual_memory().percent))
 
         if not os.path.exists(output_path):
             raise RuntimeError(i18n("ensemble_file_creation_failed").format(output_path))
+
+        # Step 4: Align ensembled output with original audio
+        def progress_update(progress_value, message):
+            progress_html = """
+            <div id="custom-progress" style="margin-top: 10px;">
+                <div style="font-size: 1rem; color: #C0C0C0; margin-bottom: 5px;" id="progress-label">{}</div>
+                <div style="width: 100%; background-color: #444; border-radius: 5px; overflow: hidden;">
+                    <div id="progress-bar" style="width: {}%; height: 20px; background-color: #6e8efb; transition: width 0.3s;"></div>
+                </div>
+            </div>
+            """.format(i18n(f"{message}_progress_label"), progress_value)
+            yield None, i18n(message), progress_html
+
+        # Initial alignment progress
+        yield from progress_update(95, "aligning_output")
+
+        # Load ensembled output
+        ensembled_audio, ensembled_sr = librosa.load(output_path, sr=None, mono=False)
+        print(f"Ensembled audio sample rate: {ensembled_sr} Hz, shape: {ensembled_audio.shape}")
+        if ensembled_sr != original_sr:
+            print(f"Resampling ensembled audio from {ensembled_sr} Hz to {original_sr} Hz")
+            ensembled_audio = librosa.resample(ensembled_audio, orig_sr=ensembled_sr, target_sr=original_sr)
+            # Ensure length matches original audio
+            if ensembled_audio.shape[-1] != original_audio.shape[-1]:
+                print(f"Adjusting ensembled audio length from {ensembled_audio.shape[-1]} to {original_audio.shape[-1]}")
+                if ensembled_audio.shape[-1] > original_audio.shape[-1]:
+                    ensembled_audio = ensembled_audio[:, :original_audio.shape[-1]]
+                else:
+                    ensembled_audio = np.pad(ensembled_audio, ((0, 0), (0, original_audio.shape[-1] - ensembled_audio.shape[-1])), mode='constant')
+            sf.write(output_path, ensembled_audio.T if ensembled_audio.ndim == 2 else ensembled_audio, original_sr)
+            ensembled_sr = original_sr
+
+        # Updated align_waveforms function with improved alignment
+        def align_waveforms(reference, target, sr, max_lag=None, progress_callback=None):
+            """
+            Align target audio to reference audio using cross-correlation with improved robustness.
+            
+            Args:
+                reference: Reference audio array (mono or stereo)
+                target: Target audio array to align
+                sr: Sample rate
+                max_lag: Maximum lag in samples (default: 1 second)
+                progress_callback: Function to call with progress updates (e.g., yield in a generator)
+            
+            Returns:
+                Aligned target audio array
+            """
+            # Adjust lengths to match
+            if reference.shape[-1] != target.shape[-1]:
+                print(f"Length mismatch: reference {reference.shape[-1]} vs target {target.shape[-1]}")
+                min_length = min(reference.shape[-1], target.shape[-1])
+                reference = reference[:, :min_length] if reference.ndim == 2 else reference[:min_length]
+                target = target[:, :min_length] if target.ndim == 2 else target[:min_length]
+                print(f"Adjusted lengths to {min_length}")
+
+            if max_lag is None:
+                max_lag = sr  # Default to 1 second
+
+            # Apply high-pass filter to emphasize transients
+            sos = butter(4, 500, btype='high', fs=sr, output='sos')
+            if reference.ndim == 2:
+                ref_filtered = np.array([sosfilt(sos, reference[channel]) for channel in range(reference.shape[0])])
+                tgt_filtered = np.array([sosfilt(sos, target[channel]) for channel in range(target.shape[0])])
+            else:
+                ref_filtered = sosfilt(sos, reference)
+                tgt_filtered = sosfilt(sos, target)
+
+            if reference.ndim == 2:  # Stereo audio
+                # Compute correlation for each channel separately
+                corr_left = correlate(ref_filtered[0], tgt_filtered[0], mode='full', method='fft')
+                corr_right = correlate(ref_filtered[1], tgt_filtered[1], mode='full', method='fft')
+                # Combine correlations by summing
+                corr = corr_left + corr_right
+                lags = np.arange(-len(tgt_filtered[0]) + 1, len(ref_filtered[0]))
+                valid = (lags >= -max_lag) & (lags <= max_lag)
+                corr = corr[valid]
+                lags = lags[valid]
+
+                # Find the lag with the maximum correlation
+                lag = lags[np.argmax(corr)]
+                print(f"Stereo combined lag: {lag} samples ({lag/sr:.3f} seconds)")
+                print(f"Correlation peak value: {np.max(corr):.2f}, mean: {np.mean(corr):.2f}")
+
+                # Validate the lag to avoid unreasonable shifts
+                max_reasonable_lag = int(sr * 0.1)  # 100ms max reasonable lag
+                if abs(lag) > max_reasonable_lag:
+                    print(f"Warning: Lag {lag} samples exceeds reasonable threshold ({max_reasonable_lag} samples). Falling back to zero lag.")
+                    lag = 0
+
+                # Apply the same lag to both channels
+                aligned = np.zeros_like(target)
+                if lag > 0:  # Target is delayed
+                    aligned[:, lag:] = target[:, :-lag] if lag < target.shape[1] else 0
+                elif lag < 0:  # Target is ahead
+                    lag = -lag
+                    aligned[:, :-lag] = target[:, lag:] if lag < target.shape[1] else 0
+                else:
+                    aligned = target.copy()
+
+                if progress_callback:
+                    progress_callback(97.5, "alignment_complete_stereo")
+
+                return aligned
+            else:  # Mono audio
+                corr = correlate(ref_filtered, tgt_filtered, mode='full', method='fft')
+                lags = np.arange(-len(tgt_filtered) + 1, len(ref_filtered))
+                valid = (lags >= -max_lag) & (lags <= max_lag)
+                corr = corr[valid]
+                lags = lags[valid]
+
+                lag = lags[np.argmax(corr)]
+                print(f"Mono lag: {lag} samples ({lag/sr:.3f} seconds)")
+                print(f"Correlation peak value: {np.max(corr):.2f}, mean: {np.mean(corr):.2f}")
+
+                # Validate the lag
+                max_reasonable_lag = int(sr * 0.1)  # 100ms max reasonable lag
+                if abs(lag) > max_reasonable_lag:
+                    print(f"Warning: Lag {lag} samples exceeds reasonable threshold ({max_reasonable_lag} samples). Falling back to zero lag.")
+                    lag = 0
+
+                if lag > 0:
+                    aligned = np.zeros_like(target)
+                    aligned[lag:] = target[:-lag] if lag < len(target) else 0
+                elif lag < 0:
+                    lag = -lag
+                    aligned = np.zeros_like(target)
+                    aligned[:-lag] = target[lag:] if lag < len(target) else 0
+                else:
+                    aligned = target.copy()
+
+                if progress_callback:
+                    progress_callback(97.5, "alignment_complete")
+
+                return aligned
+
+        # Align with progress updates and memory logging
+        print(f"Memory before alignment: {psutil.virtual_memory().percent}%")
+        aligned_audio = align_waveforms(original_audio, ensembled_audio, original_sr, max_lag=original_sr, progress_callback=progress_update)
+        print(f"Memory after alignment: {psutil.virtual_memory().percent}%")
+
+        # Save aligned audio
+        sf.write(output_path, aligned_audio.T if aligned_audio.ndim == 2 else aligned_audio, original_sr)
 
         progress_html = """
         <div id="custom-progress" style="margin-top: 10px;">
