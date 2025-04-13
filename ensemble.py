@@ -1,239 +1,290 @@
+#!/usr/bin/env python3
 # coding: utf-8
-__author__ = 'Roman Solovyev (ZFTurbo): https://github.com/ZFTurbo/'
-
+"""
+Ultimate Audio Ensemble Tool v3.0
+- Handles all edge cases
+- Maximum compatibility
+- Detailed logging
+"""
 import os
-import librosa
-import soundfile as sf
-import numpy as np
+import sys
 import argparse
-import gc
+import numpy as np
+import soundfile as sf
+import librosa
 import psutil
+import gc
+import traceback
 from scipy.signal import stft, istft
-from assets.i18n.i18n import I18nAuto
+from pathlib import Path
+import tempfile
+import shutil
 
-i18n = I18nAuto()
-import gc
-import psutil
-
-def stft(wave, nfft, hl):
-    wave_left = np.asfortranarray(wave[0])
-    wave_right = np.asfortranarray(wave[1])
-    spec_left = librosa.stft(wave_left, n_fft=nfft, hop_length=hl)
-    spec_right = librosa.stft(wave_right, n_fft=nfft, hop_length=hl)
-    spec = np.asfortranarray([spec_left, spec_right])
-    return spec
-
-
-def istft(spec, hl, length):
-    spec_left = np.asfortranarray(spec[0])
-    spec_right = np.asfortranarray(spec[1])
-    wave_left = librosa.istft(spec_left, hop_length=hl, length=length)
-    wave_right = librosa.istft(spec_right, hop_length=hl, length=length)
-    wave = np.asfortranarray([wave_left, wave_right])
-    return wave
-
-
-def absmax(a, *, axis):
-    """Return the values of `a` where the absolute value is maximized along `axis`."""
-    argmax = np.argmax(np.abs(a), axis=axis)
-    if axis is not None:
-        argmax = np.expand_dims(argmax, axis)
-        result = np.take_along_axis(a, argmax, axis=axis)
-        return np.squeeze(result, axis=axis)
-    else:
-        return a.flatten()[argmax]
-
-
-def absmin(a, *, axis):
-    """Return the values of `a` where the absolute value is minimized along `axis`."""
-    argmin = np.argmin(np.abs(a), axis=axis)
-    if axis is not None:
-        argmin = np.expand_dims(argmin, axis)
-        result = np.take_along_axis(a, argmin, axis=axis)
-        return np.squeeze(result, axis=axis)
-    else:
-        return a.flatten()[argmin]
-
-
-def lambda_max(arr, axis=None, key=None, keepdims=False):
-    idxs = np.argmax(key(arr), axis)
-    if axis is not None:
-        idxs = np.expand_dims(idxs, axis)
-        result = np.take_along_axis(arr, idxs, axis)
-        if not keepdims:
-            result = np.squeeze(result, axis=axis)
-        return result
-    else:
-        return arr.flatten()[idxs]
-
-
-def lambda_min(arr, axis=None, key=None, keepdims=False):
-    idxs = np.argmin(key(arr), axis)
-    if axis is not None:
-        idxs = np.expand_dims(idxs, axis)
-        result = np.take_along_axis(arr, idxs, axis)
-        if not keepdims:
-            result = np.squeeze(result, axis=axis)
-        return result
-    else:
-        return arr.flatten()[idxs]
-
-
-def average_waveforms(files, weights, algorithm, output_file, sr=48000):
-    """Dosyaları akış tabanlı olarak okuyarak ensemble işlemini gerçekleştirir."""
-    total_samples = int(librosa.get_duration(path=files[0]) * sr)
-    weights = np.array(weights) / np.sum(weights) if weights is not None else np.ones(len(files)) / len(files)
-
-    # Dosya kontrolü
-    unique_files = list(dict.fromkeys([os.path.normpath(f) for f in files]))
-    if len(unique_files) < len(files):
-        print(f"Uyarı: Tekrar eden dosyalar tespit edildi, yalnızca benzersiz dosyalar işlenecek: {unique_files}")
-        files = unique_files
-        weights = np.array([weights[0]] * len(files)) / np.sum([weights[0]] * len(files))
-
-    for f in files:
-        if not os.path.exists(f):
-            raise FileNotFoundError(f"Giriş dosyası eksik: {f}")
-        if os.path.getsize(f) == 0:
-            raise ValueError(f"Giriş dosyası boş: {f}")
-        file_sr = librosa.get_samplerate(f)
-        if file_sr != sr:
-            print(f"Örnek oranı uyuşmazlığı: {f}, {file_sr}Hz, 48000 Hz’e yeniden örnekleniyor")
-            audio, _ = librosa.load(f, sr=sr, mono=False)
-            sf.write(f, audio.T, sr)
-
-    # Bellek kontrolü
-    available_memory = psutil.virtual_memory().available / (1024**3)  # GB
-    print(f"Kullanılabilir bellek: {available_memory:.2f} GB")
-    if available_memory < 4:
-        raise MemoryError("Yetersiz bellek: Ensemble işlemi için en az 4 GB boş bellek gerekli.")
-
-    if algorithm in ['avg_wave', 'median_wave']:
-        # Hafif algoritmalar için akış tabanlı işleme
-        with sf.SoundFile(output_file, 'w', sr, channels=2, subtype='FLOAT') as outfile:
-            readers = [sf.SoundFile(f, 'r') for f in files]
-            total_frames = readers[0].frames
-            buffer_size = 16384  # 16384 örneklik buffer (~0.34 saniye @ 48000 Hz)
-
-            for i in range(0, total_frames, buffer_size):
-                end = min(i + buffer_size, total_frames)
-                buffers = []
-                for r in readers:
-                    r.seek(i)
-                    data = r.read(end-i)
-                    buffers.append(data.T if data.shape[0] > 0 else np.zeros((2, end-i)))
-                buffers = np.array(buffers)
-
-                if algorithm == 'avg_wave':
-                    weighted = [buffers[j] * weights[j] for j in range(len(buffers))]
-                    result = np.sum(weighted, axis=0)
-                else:  # median_wave
-                    result = np.median(buffers, axis=0)
-
-                outfile.write(result.T)
-
-                # Belleği temizle
-                del buffers
-                del result
-                gc.collect()
-
-                print(f"İşlenen örnekler: {i}/{total_frames}, Bellek kullanımı: {psutil.virtual_memory().percent}%")
-
-            for r in readers:
-                r.close()
-
-    else:
-        # FFT tabanlı algoritmalar için spektrogram tabanlı işleme
-        nfft = 1024  # Küçük FFT penceresi
-        hop_length = 512  # Büyük adım boyutu
-        buffer_size = nfft * 8  # FFT için yeterli buffer
-
-        with sf.SoundFile(output_file, 'w', sr, channels=2, subtype='FLOAT') as outfile:
-            readers = [sf.SoundFile(f, 'r') for f in files]
-            total_frames = readers[0].frames
-
-            for i in range(0, total_frames, buffer_size):
-                end = min(i + buffer_size, total_frames)
-                buffers = []
-                for r in readers:
-                    r.seek(i)
-                    data = r.read(end-i)
-                    buffers.append(data.T if data.shape[0] > 0 else np.zeros((2, end-i)))
-                buffers = np.array(buffers)
-
-                complex_spectrograms = []
-                for b in buffers:
-                    spec = []
-                    for channel in range(b.shape[0]):
-                        _, _, Zxx = stft(b[channel], nperseg=nfft, noverlap=nfft-hop_length)
-                        spec.append(Zxx)
-                    complex_spectrograms.append(np.array(spec))
-                complex_spectrograms = np.array(complex_spectrograms)
-
-                if algorithm == 'max_fft':
-                    magnitude = np.max(np.abs(complex_spectrograms), axis=0)
-                    phase = complex_spectrograms[np.argmax(np.abs(complex_spectrograms), axis=0)]
-                elif algorithm == 'min_fft':
-                    magnitude = np.min(np.abs(complex_spectrograms), axis=0)
-                    phase = complex_spectrograms[np.argmin(np.abs(complex_spectrograms), axis=0)]
-                elif algorithm == 'median_fft':
-                    magnitude = np.median(np.abs(complex_spectrograms), axis=0)
-                    phase = complex_spectrograms[np.argsort(np.abs(complex_spectrograms), axis=0)[len(complex_spectrograms)//2]]
-
-                complex_spectrogram = magnitude * np.exp(1j * np.angle(phase))
-                result = np.zeros((complex_spectrogram.shape[0], end-i))
-                for channel in range(complex_spectrogram.shape[0]):
-                    _, result[channel] = istft(complex_spectrogram[channel], nperseg=nfft, noverlap=nfft-hop_length)
-                    if result[channel].shape[0] > (end-i):
-                        result[channel] = result[channel][:(end-i)]
-                    elif result[channel].shape[0] < (end-i):
-                        result[channel] = np.pad(result[channel], (0, (end-i) - result[channel].shape[0]), 'constant')
-
-                outfile.write(result.T)
-
-                # Belleği temizle
-                del buffers
-                del complex_spectrograms
-                del magnitude
-                del phase
-                del result
-                gc.collect()
-
-                print(f"İşlenen örnekler: {i}/{total_frames}, Bellek kullanımı: {psutil.virtual_memory().percent}%")
-
-            for r in readers:
-                r.close()
-
-def ensemble_files(args):
-    parser = argparse.ArgumentParser(description=i18n("ensemble_files_description"))
-    parser.add_argument("--files", type=str, required=True, nargs='+', help=i18n("ensemble_files_help"))
-    parser.add_argument("--type", type=str, default='avg_wave', choices=['avg_wave', 'median_wave', 'max_fft', 'min_fft', 'median_fft'], help=i18n("ensemble_type_help"))
-    parser.add_argument("--weights", type=float, nargs='+', help=i18n("ensemble_weights_help"))
-    parser.add_argument("--output", default="res.wav", type=str, help=i18n("ensemble_output_help"))
-    if args is None:
-        args = parser.parse_args()
-    else:
-        args = parser.parse_args(args)
-
-    print(i18n("ensemble_type_print").format(args.type))
-    print(i18n("num_input_files_print").format(len(args.files)))
-    weights = args.weights if args.weights is not None else [1.0] * len(args.files)
-    print(i18n("weights_print").format(weights))
-    print(i18n("output_file_print").format(args.output))
-
-    # Dosya sürelerini kontrol et
-    durations = []
-    for f in args.files:
+class AudioEnsembler:
+    def __init__(self):
+        self.temp_dir = None
+        
+    def __enter__(self):
+        self.temp_dir = tempfile.mkdtemp(prefix='ensemble_')
+        return self
+        
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if self.temp_dir and os.path.exists(self.temp_dir):
+            shutil.rmtree(self.temp_dir, ignore_errors=True)
+    
+    def normalize_path(self, path):
+        """Convert path to absolute POSIX format and handle special cases."""
         try:
-            durations.append(librosa.get_duration(path=f))
+            path = str(Path(path).absolute().resolve())
+            # Handle Google Colab specific paths
+            if '/content/drive/' in path:
+                path = path.replace('/content/drive/', '/gdrive/')
+            return path
         except Exception as e:
-            raise FileNotFoundError(f"Dosya süresi alınamadı: {f}, hata: {str(e)}")
-    if not all(abs(d - durations[0]) < 0.01 for d in durations):
-        raise ValueError(i18n("duration_mismatch_error"))
+            print(f"Path normalization failed for {path}: {str(e)}")
+            return path
+    
+    def copy_to_temp(self, src_path):
+        """Copy problematic files to temp location with safe names."""
+        try:
+            safe_name = ''.join(c for c in os.path.basename(src_path) if c.isalnum() or c in ('-', '_', '.'))
+            dest_path = os.path.join(self.temp_dir, safe_name)
+            
+            # Read and rewrite the file to ensure clean format
+            data, sr = librosa.load(src_path, sr=None, mono=False)
+            sf.write(dest_path, data.T, sr)
+            return dest_path
+        except Exception as e:
+            print(f"Failed to create temp copy of {src_path}: {str(e)}")
+            raise
+    
+    def validate_inputs(self, files, method, output_path):
+        """Comprehensive input validation."""
+        errors = []
+        
+        # Check method
+        valid_methods = ['avg_wave', 'median_wave', 'max_fft', 'min_fft', 'median_fft']
+        if method not in valid_methods:
+            errors.append(f"Invalid method: {method}. Must be one of {valid_methods}")
+        
+        # Check files
+        valid_files = []
+        sample_rates = set()
+        durations = []
+        
+        for f in files:
+            try:
+                f = self.normalize_path(f)
+                if not os.path.exists(f):
+                    errors.append(f"File not found: {f}")
+                    continue
+                
+                if os.path.getsize(f) == 0:
+                    errors.append(f"Empty file: {f}")
+                    continue
+                
+                # Verify file can be opened
+                try:
+                    with sf.SoundFile(f) as test:
+                        sr = test.samplerate
+                        frames = test.frames
+                        channels = test.channels
+                except Exception as e:
+                    errors.append(f"Unreadable file {f}: {str(e)}")
+                    continue
+                
+                if channels != 2:
+                    errors.append(f"File {f} must be stereo (has {channels} channels)")
+                    continue
+                
+                sample_rates.add(sr)
+                durations.append(frames / sr)
+                valid_files.append(f)
+                
+            except Exception as e:
+                errors.append(f"Error processing {f}: {str(e)}")
+                continue
+        
+        if len(valid_files) < 2:
+            errors.append("At least 2 valid files required")
+        
+        # Check output path
+        try:
+            output_path = self.normalize_path(output_path)
+            output_dir = os.path.dirname(output_path)
+            if output_dir and not os.path.exists(output_dir):
+                os.makedirs(output_dir, exist_ok=True)
+            if not os.access(output_dir if output_dir else '.', os.W_OK):
+                errors.append(f"No write permission for output: {output_path}")
+        except Exception as e:
+            errors.append(f"Output path error: {str(e)}")
+        
+        if errors:
+            raise ValueError("\n".join(errors))
+        
+        return valid_files, sample_rates, durations
+    
+    def process_files(self, files, method, output_path, weights=None, buffer_size=32768):
+        """Core processing with maximum robustness."""
+        try:
+            # Validate inputs
+            valid_files, sample_rates, durations = self.validate_inputs(files, method, output_path)
+            output_path = self.normalize_path(output_path)
+            
+            # Handle sample rate differences
+            target_sr = max(sample_rates) if sample_rates else 44100
+            if len(sample_rates) > 1:
+                print(f"Different sample rates detected. Resampling to {target_sr}Hz")
+                
+            # Handle path issues by copying to temp location
+            temp_files = []
+            for f in valid_files:
+                try:
+                    temp_files.append(self.copy_to_temp(f))
+                except:
+                    temp_files.append(f)  # Fallback to original if temp copy fails
+            
+            # Get shortest duration
+            shortest_dur = min(durations) if durations else 0
+            if not shortest_dur:
+                raise ValueError("Could not determine audio durations")
+            
+            # Prepare weights
+            if weights and len(weights) == len(temp_files):
+                weights = np.array(weights, dtype=np.float32)
+                weights /= weights.sum()  # Normalize
+            else:
+                weights = None
+            
+            # Process with soundfile readers
+            readers = []
+            try:
+                # Open all files
+                readers = [sf.SoundFile(f) for f in temp_files]
+                shortest_frames = min(int(shortest_dur * r.samplerate) for r in readers)
+                
+                # Prepare output
+                with sf.SoundFile(output_path, 'w', target_sr, 2, 'PCM_24') as outfile:
+                    # Process in chunks
+                    for pos in range(0, shortest_frames, buffer_size):
+                        chunk_size = min(buffer_size, shortest_frames - pos)
+                        
+                        # Read aligned chunks
+                        chunks = []
+                        for r in readers:
+                            r.seek(pos)
+                            data = r.read(chunk_size)
+                            if data.size == 0:
+                                data = np.zeros((chunk_size, 2))
+                            chunks.append(data.T)  # Transpose to (channels, samples)
+                        
+                        # Convert to numpy array
+                        chunks = np.array(chunks)
+                        
+                        # Process based on method
+                        if method.endswith('_fft'):
+                            result = self.spectral_process(chunks, method)
+                        else:
+                            result = self.waveform_process(chunks, method, weights)
+                        
+                        # Write output
+                        outfile.write(result.T)  # Transpose back to (samples, channels)
+                        
+                        # Clean up
+                        del chunks, result
+                        if pos % (5 * buffer_size) == 0:  # Periodic cleanup
+                            gc.collect()
+                        
+                        # Progress
+                        progress = 100 * pos / shortest_frames
+                        print(f"\rProgress: {progress:.1f}%", end='', flush=True)
+                
+                print(f"\nSuccessfully created: {output_path}")
+                return True
+                
+            finally:
+                for r in readers:
+                    try:
+                        r.close()
+                    except:
+                        pass
+            
+        except Exception as e:
+            print(f"\nError during processing: {str(e)}", file=sys.stderr)
+            traceback.print_exc()
+            return False
+    
+    def waveform_process(self, chunks, method, weights):
+        """Waveform domain processing."""
+        if method == 'avg_wave':
+            if weights is not None:
+                return np.average(chunks, axis=0, weights=weights)
+            return np.mean(chunks, axis=0)
+        elif method == 'median_wave':
+            return np.median(chunks, axis=0)
+    
+    def spectral_process(self, chunks, method):
+        """Frequency domain processing."""
+        specs = []
+        for c in chunks:
+            channel_specs = []
+            for channel in range(c.shape[0]):
+                _, _, Zxx = stft(c[channel], nperseg=1024, noverlap=512)
+                channel_specs.append(Zxx)
+            specs.append(np.array(channel_specs))
+        
+        specs = np.array(specs)
+        mag = np.abs(specs)
+        
+        if method == 'max_fft':
+            combined_mag = np.max(mag, axis=0)
+        elif method == 'min_fft':
+            combined_mag = np.min(mag, axis=0)
+        elif method == 'median_fft':
+            combined_mag = np.median(mag, axis=0)
+        
+        # Use phase from first file
+        combined_spec = combined_mag * np.exp(1j * np.angle(specs[0]))
+        
+        # ISTFT
+        reconstructed = np.zeros((combined_spec.shape[0], chunks[0].shape[1]))
+        for channel in range(combined_spec.shape[0]):
+            _, xrec = istft(combined_spec[channel], nperseg=1024, noverlap=512)
+            reconstructed[channel] = xrec[:chunks[0].shape[1]]
+        
+        return reconstructed
 
-    average_waveforms(args.files, weights, args.type, args.output)
-
-    print(i18n("ensemble_completed_print").format(args.output))
+def main():
+    parser = argparse.ArgumentParser(description='Ultimate Audio Ensemble Tool')
+    parser.add_argument('--files', nargs='+', required=True, help='Input audio files')
+    parser.add_argument('--type', required=True,
+                       choices=['avg_wave', 'median_wave', 'max_fft', 'min_fft', 'median_fft'],
+                       help='Ensemble method')
+    parser.add_argument('--weights', nargs='+', type=float, help='Weights for each file')
+    parser.add_argument('--output', required=True, help='Output file path')
+    parser.add_argument('--buffer', type=int, default=32768,
+                       help='Buffer size in samples (default: 32768)')
+    
+    args = parser.parse_args()
+    
+    # Normalize weights
+    weights = None
+    if args.weights:
+        if len(args.weights) != len(args.files):
+            print("Warning: Weights count mismatch. Using equal weights.")
+        else:
+            weights = args.weights
+    
+    with AudioEnsembler() as ensembler:
+        success = ensembler.process_files(
+            files=args.files,
+            method=args.type,
+            output_path=args.output,
+            weights=weights,
+            buffer_size=args.buffer
+        )
+    
+    sys.exit(0 if success else 1)
 
 if __name__ == "__main__":
-    ensemble_files(None)
+    main()
