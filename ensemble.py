@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 # coding: utf-8
 """
-Ultimate Audio Ensemble Tool v3.0
-- Handles all edge cases
-- Maximum compatibility
-- Detailed logging
+Ultimate Audio Ensemble Processor v4.0
+- Tüm ensemble yöntemlerini destekler (avg_wave, median_wave, max_wave, min_wave, max_fft, min_fft, median_fft)
+- Özel karakterli ve uzun dosya yollarını destekler
+- Büyük dosyaları verimli şekilde işler
+- Detaylı hata yönetimi ve loglama
 """
+
 import os
 import sys
 import argparse
@@ -19,212 +21,164 @@ from scipy.signal import stft, istft
 from pathlib import Path
 import tempfile
 import shutil
+import json
+from tqdm import tqdm
 
-class AudioEnsembler:
+class AudioEnsembleEngine:
     def __init__(self):
         self.temp_dir = None
+        self.log_file = "ensemble_processor.log"
         
     def __enter__(self):
-        self.temp_dir = tempfile.mkdtemp(prefix='ensemble_')
+        self.temp_dir = tempfile.mkdtemp(prefix='audio_ensemble_')
+        self.setup_logging()
         return self
         
     def __exit__(self, exc_type, exc_val, exc_tb):
         if self.temp_dir and os.path.exists(self.temp_dir):
             shutil.rmtree(self.temp_dir, ignore_errors=True)
     
+    def setup_logging(self):
+        """Initialize detailed logging system."""
+        with open(self.log_file, 'w') as f:
+            f.write("Audio Ensemble Processor Log\n")
+            f.write("="*50 + "\n")
+            f.write(f"System Memory: {psutil.virtual_memory().total/(1024**3):.2f} GB\n")
+            f.write(f"Python Version: {sys.version}\n\n")
+    
+    def log_message(self, message):
+        """Log messages with timestamp."""
+        with open(self.log_file, 'a') as f:
+            f.write(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {message}\n")
+    
     def normalize_path(self, path):
-        """Convert path to absolute POSIX format and handle special cases."""
+        """Handle all path-related issues comprehensively."""
         try:
-            path = str(Path(path).absolute().resolve())
             # Handle Google Colab specific paths
             if '/content/drive/' in path:
-                path = path.replace('/content/drive/', '/gdrive/')
-            return path
-        except Exception as e:
-            print(f"Path normalization failed for {path}: {str(e)}")
-            return path
-    
-    def copy_to_temp(self, src_path):
-        """Copy problematic files to temp location with safe names."""
-        try:
-            safe_name = ''.join(c for c in os.path.basename(src_path) if c.isalnum() or c in ('-', '_', '.'))
-            dest_path = os.path.join(self.temp_dir, safe_name)
+                path = '/gdrive/' + path.split('/content/drive/')[-1]
             
-            # Read and rewrite the file to ensure clean format
-            data, sr = librosa.load(src_path, sr=None, mono=False)
-            sf.write(dest_path, data.T, sr)
-            return dest_path
+            # Convert to absolute path
+            path = str(Path(path).absolute().resolve())
+            
+            # Handle problematic characters
+            if any(char in path for char in '[]()|&; '):
+                base, ext = os.path.splitext(path)
+                safe_name = f"{hash(base)}{ext}"
+                temp_path = os.path.join(self.temp_dir, safe_name)
+                
+                if not os.path.exists(temp_path):
+                    data, sr = librosa.load(path, sr=None, mono=False)
+                    sf.write(temp_path, data.T, sr)
+                
+                return temp_path
+            
+            return path
         except Exception as e:
-            print(f"Failed to create temp copy of {src_path}: {str(e)}")
-            raise
+            self.log_message(f"Path normalization failed: {str(e)}")
+            return path
     
     def validate_inputs(self, files, method, output_path):
-        """Comprehensive input validation."""
+        """Comprehensive input validation with detailed error reporting."""
         errors = []
+        valid_methods = [
+            'avg_wave', 'median_wave', 'max_wave', 'min_wave',
+            'max_fft', 'min_fft', 'median_fft'
+        ]
         
-        # Check method
-        valid_methods = ['avg_wave', 'median_wave', 'max_fft', 'min_fft', 'median_fft']
+        # Method validation
         if method not in valid_methods:
-            errors.append(f"Invalid method: {method}. Must be one of {valid_methods}")
+            errors.append(f"Invalid method '{method}'. Available: {valid_methods}")
         
-        # Check files
+        # File validation
         valid_files = []
         sample_rates = set()
         durations = []
+        channels_set = set()
         
         for f in files:
             try:
-                f = self.normalize_path(f)
-                if not os.path.exists(f):
-                    errors.append(f"File not found: {f}")
+                f_normalized = self.normalize_path(f)
+                
+                # Basic checks
+                if not os.path.exists(f_normalized):
+                    errors.append(f"File not found: {f_normalized}")
                     continue
                 
-                if os.path.getsize(f) == 0:
-                    errors.append(f"Empty file: {f}")
+                if os.path.getsize(f_normalized) == 0:
+                    errors.append(f"Empty file: {f_normalized}")
                     continue
                 
-                # Verify file can be opened
+                # Audio file validation
                 try:
-                    with sf.SoundFile(f) as test:
-                        sr = test.samplerate
-                        frames = test.frames
-                        channels = test.channels
+                    with sf.SoundFile(f_normalized) as sf_file:
+                        sr = sf_file.samplerate
+                        frames = sf_file.frames
+                        channels = sf_file.channels
                 except Exception as e:
-                    errors.append(f"Unreadable file {f}: {str(e)}")
+                    errors.append(f"Invalid audio file {f_normalized}: {str(e)}")
                     continue
                 
+                # Audio characteristics
                 if channels != 2:
-                    errors.append(f"File {f} must be stereo (has {channels} channels)")
+                    errors.append(f"File must be stereo (has {channels} channels): {f_normalized}")
                     continue
                 
                 sample_rates.add(sr)
                 durations.append(frames / sr)
-                valid_files.append(f)
+                channels_set.add(channels)
+                valid_files.append(f_normalized)
                 
             except Exception as e:
                 errors.append(f"Error processing {f}: {str(e)}")
                 continue
         
+        # Final checks
         if len(valid_files) < 2:
             errors.append("At least 2 valid files required")
         
-        # Check output path
+        if len(sample_rates) > 1:
+            errors.append(f"Sample rate mismatch: {sample_rates}")
+        
+        if len(channels_set) > 1:
+            errors.append(f"Channel count mismatch: {channels_set}")
+        
+        # Output path validation
         try:
             output_path = self.normalize_path(output_path)
-            output_dir = os.path.dirname(output_path)
-            if output_dir and not os.path.exists(output_dir):
+            output_dir = os.path.dirname(output_path) or '.'
+            
+            if not os.path.exists(output_dir):
                 os.makedirs(output_dir, exist_ok=True)
-            if not os.access(output_dir if output_dir else '.', os.W_OK):
-                errors.append(f"No write permission for output: {output_path}")
+            
+            if not os.access(output_dir, os.W_OK):
+                errors.append(f"No write permission for output directory: {output_dir}")
         except Exception as e:
             errors.append(f"Output path error: {str(e)}")
         
         if errors:
-            raise ValueError("\n".join(errors))
+            error_msg = "\n".join(errors)
+            self.log_message(f"Validation failed:\n{error_msg}")
+            raise ValueError(error_msg)
         
-        return valid_files, sample_rates, durations
+        target_sr = sample_rates.pop() if sample_rates else 44100
+        return valid_files, target_sr, min(durations) if durations else None
     
-    def process_files(self, files, method, output_path, weights=None, buffer_size=32768):
-        """Core processing with maximum robustness."""
-        try:
-            # Validate inputs
-            valid_files, sample_rates, durations = self.validate_inputs(files, method, output_path)
-            output_path = self.normalize_path(output_path)
-            
-            # Handle sample rate differences
-            target_sr = max(sample_rates) if sample_rates else 44100
-            if len(sample_rates) > 1:
-                print(f"Different sample rates detected. Resampling to {target_sr}Hz")
-                
-            # Handle path issues by copying to temp location
-            temp_files = []
-            for f in valid_files:
-                try:
-                    temp_files.append(self.copy_to_temp(f))
-                except:
-                    temp_files.append(f)  # Fallback to original if temp copy fails
-            
-            # Get shortest duration
-            shortest_dur = min(durations) if durations else 0
-            if not shortest_dur:
-                raise ValueError("Could not determine audio durations")
-            
-            # Prepare weights
-            if weights and len(weights) == len(temp_files):
-                weights = np.array(weights, dtype=np.float32)
-                weights /= weights.sum()  # Normalize
-            else:
-                weights = None
-            
-            # Process with soundfile readers
-            readers = []
-            try:
-                # Open all files
-                readers = [sf.SoundFile(f) for f in temp_files]
-                shortest_frames = min(int(shortest_dur * r.samplerate) for r in readers)
-                
-                # Prepare output
-                with sf.SoundFile(output_path, 'w', target_sr, 2, 'PCM_24') as outfile:
-                    # Process in chunks
-                    for pos in range(0, shortest_frames, buffer_size):
-                        chunk_size = min(buffer_size, shortest_frames - pos)
-                        
-                        # Read aligned chunks
-                        chunks = []
-                        for r in readers:
-                            r.seek(pos)
-                            data = r.read(chunk_size)
-                            if data.size == 0:
-                                data = np.zeros((chunk_size, 2))
-                            chunks.append(data.T)  # Transpose to (channels, samples)
-                        
-                        # Convert to numpy array
-                        chunks = np.array(chunks)
-                        
-                        # Process based on method
-                        if method.endswith('_fft'):
-                            result = self.spectral_process(chunks, method)
-                        else:
-                            result = self.waveform_process(chunks, method, weights)
-                        
-                        # Write output
-                        outfile.write(result.T)  # Transpose back to (samples, channels)
-                        
-                        # Clean up
-                        del chunks, result
-                        if pos % (5 * buffer_size) == 0:  # Periodic cleanup
-                            gc.collect()
-                        
-                        # Progress
-                        progress = 100 * pos / shortest_frames
-                        print(f"\rProgress: {progress:.1f}%", end='', flush=True)
-                
-                print(f"\nSuccessfully created: {output_path}")
-                return True
-                
-            finally:
-                for r in readers:
-                    try:
-                        r.close()
-                    except:
-                        pass
-            
-        except Exception as e:
-            print(f"\nError during processing: {str(e)}", file=sys.stderr)
-            traceback.print_exc()
-            return False
-    
-    def waveform_process(self, chunks, method, weights):
-        """Waveform domain processing."""
+    def process_waveform(self, chunks, method, weights=None):
+        """All waveform domain processing methods."""
         if method == 'avg_wave':
             if weights is not None:
                 return np.average(chunks, axis=0, weights=weights)
             return np.mean(chunks, axis=0)
         elif method == 'median_wave':
             return np.median(chunks, axis=0)
+        elif method == 'max_wave':
+            return np.max(chunks, axis=0)
+        elif method == 'min_wave':
+            return np.min(chunks, axis=0)
     
-    def spectral_process(self, chunks, method):
-        """Frequency domain processing."""
+    def process_spectral(self, chunks, method):
+        """All frequency domain processing methods."""
         specs = []
         for c in chunks:
             channel_specs = []
@@ -246,45 +200,127 @@ class AudioEnsembler:
         # Use phase from first file
         combined_spec = combined_mag * np.exp(1j * np.angle(specs[0]))
         
-        # ISTFT
+        # ISTFT reconstruction
         reconstructed = np.zeros((combined_spec.shape[0], chunks[0].shape[1]))
         for channel in range(combined_spec.shape[0]):
             _, xrec = istft(combined_spec[channel], nperseg=1024, noverlap=512)
             reconstructed[channel] = xrec[:chunks[0].shape[1]]
         
         return reconstructed
+    
+    def run_ensemble(self, files, method, output_path, weights=None, buffer_size=32768):
+        """Core ensemble processing with maximum robustness."""
+        try:
+            # Validate and prepare inputs
+            valid_files, target_sr, duration = self.validate_inputs(files, method, output_path)
+            output_path = self.normalize_path(output_path)
+            
+            self.log_message(f"Starting ensemble with method: {method}")
+            self.log_message(f"Input files: {json.dumps(valid_files, indent=2)}")
+            self.log_message(f"Target sample rate: {target_sr}Hz")
+            self.log_message(f"Output path: {output_path}")
+            
+            # Prepare weights
+            if weights and len(weights) == len(valid_files):
+                weights = np.array(weights, dtype=np.float32)
+                weights /= weights.sum()  # Normalize
+                self.log_message(f"Using weights: {weights}")
+            else:
+                weights = None
+            
+            # Open all files
+            readers = []
+            try:
+                readers = [sf.SoundFile(f) for f in valid_files]
+                shortest_frames = min(int(duration * r.samplerate) for r in readers)
+                
+                # Prepare output
+                with sf.SoundFile(output_path, 'w', target_sr, 2, 'PCM_24') as outfile:
+                    # Process in chunks with progress bar
+                    progress = tqdm(total=shortest_frames, unit='samples', desc='Processing')
+                    
+                    for pos in range(0, shortest_frames, buffer_size):
+                        chunk_size = min(buffer_size, shortest_frames - pos)
+                        
+                        # Read aligned chunks from all files
+                        chunks = []
+                        for r in readers:
+                            r.seek(pos)
+                            data = r.read(chunk_size)
+                            if data.size == 0:
+                                data = np.zeros((chunk_size, 2))
+                            chunks.append(data.T)  # Transpose to (channels, samples)
+                        
+                        chunks = np.array(chunks)
+                        
+                        # Process based on method type
+                        if method.endswith('_fft'):
+                            result = self.process_spectral(chunks, method)
+                        else:
+                            result = self.process_waveform(chunks, method, weights)
+                        
+                        # Write output
+                        outfile.write(result.T)  # Transpose back to (samples, channels)
+                        
+                        # Clean up and update progress
+                        del chunks, result
+                        if pos % (5 * buffer_size) == 0:
+                            gc.collect()
+                        
+                        progress.update(chunk_size)
+                    
+                    progress.close()
+                
+                self.log_message(f"Successfully created output: {output_path}")
+                print(f"\nEnsemble completed successfully: {output_path}")
+                return True
+                
+            except Exception as e:
+                self.log_message(f"Processing error: {str(e)}\n{traceback.format_exc()}")
+                raise
+            finally:
+                for r in readers:
+                    try:
+                        r.close()
+                    except:
+                        pass
+                
+        except Exception as e:
+            self.log_message(f"Fatal error: {str(e)}\n{traceback.format_exc()}")
+            print(f"\nError during processing: {str(e)}", file=sys.stderr)
+            return False
 
 def main():
-    parser = argparse.ArgumentParser(description='Ultimate Audio Ensemble Tool')
-    parser.add_argument('--files', nargs='+', required=True, help='Input audio files')
+    parser = argparse.ArgumentParser(
+        description='Ultimate Audio Ensemble Processor - Supports all ensemble methods',
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter
+    )
+    parser.add_argument('--files', nargs='+', required=True,
+                       help='Input audio files (supports special characters)')
     parser.add_argument('--type', required=True,
-                       choices=['avg_wave', 'median_wave', 'max_fft', 'min_fft', 'median_fft'],
-                       help='Ensemble method')
-    parser.add_argument('--weights', nargs='+', type=float, help='Weights for each file')
-    parser.add_argument('--output', required=True, help='Output file path')
+                       choices=['avg_wave', 'median_wave', 'max_wave', 'min_wave',
+                               'max_fft', 'min_fft', 'median_fft'],
+                       help='Ensemble method to use')
+    parser.add_argument('--weights', nargs='+', type=float,
+                       help='Relative weights for each input file')
+    parser.add_argument('--output', required=True,
+                       help='Output file path')
     parser.add_argument('--buffer', type=int, default=32768,
-                       help='Buffer size in samples (default: 32768)')
+                       help='Buffer size in samples (larger=faster but uses more memory)')
     
     args = parser.parse_args()
     
-    # Normalize weights
-    weights = None
-    if args.weights:
-        if len(args.weights) != len(args.files):
-            print("Warning: Weights count mismatch. Using equal weights.")
-        else:
-            weights = args.weights
-    
-    with AudioEnsembler() as ensembler:
-        success = ensembler.process_files(
+    with AudioEnsembleEngine() as engine:
+        success = engine.run_ensemble(
             files=args.files,
             method=args.type,
             output_path=args.output,
-            weights=weights,
+            weights=args.weights,
             buffer_size=args.buffer
         )
     
     sys.exit(0 if success else 1)
 
 if __name__ == "__main__":
+    import time
     main()
