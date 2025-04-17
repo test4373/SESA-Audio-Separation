@@ -231,7 +231,6 @@ def create_interface():
                                         info=i18n("instrumental_info")
                                     )
 
-                            # Apollo ayarları
                             with gr.Row():
                                 use_apollo = gr.Checkbox(
                                     label=i18n("enhance_with_apollo"),
@@ -291,18 +290,20 @@ def create_interface():
                             clear_old_output_btn = gr.Button(i18n("reset"), variant="secondary")
                         clear_old_output_status = gr.Textbox(label=i18n("status"), interactive=False)
 
-                        # Apollo ayarlarının görünürlüğünü kontrol eden event
                         use_apollo.change(
                             fn=lambda x: gr.update(visible=x),
                             inputs=use_apollo,
                             outputs=apollo_settings_group
                         )
 
-                        # Mid/Side model dropdown’ını kontrol eden event
                         apollo_method.change(
-                            fn=lambda x: [gr.update(visible=x != i18n("mid_side_method")), gr.update(visible=x == i18n("mid_side_method"))],
+                            fn=lambda x: [
+                                gr.update(visible=x != i18n("mid_side_method")),
+                                gr.update(visible=x == i18n("mid_side_method")),
+                                "Apollo Universal Model" if x == i18n("mid_side_method") else None
+                            ],
                             inputs=apollo_method,
-                            outputs=[apollo_normal_model_row, apollo_midside_model_row]
+                            outputs=[apollo_normal_model_row, apollo_midside_model_row, apollo_normal_model]
                         )
 
                     with gr.Column(scale=2, min_width=800):
@@ -397,7 +398,6 @@ def create_interface():
                                     value='wav FLOAT'
                                 )
 
-                            # Apollo ayarları Auto Ensemble için
                             with gr.Row():
                                 auto_use_apollo = gr.Checkbox(
                                     label=i18n("enhance_with_apollo"),
@@ -483,18 +483,20 @@ def create_interface():
 
                         auto_process_btn = gr.Button(i18n("start_processing"), variant="primary")
 
-                        # Apollo ayarlarının görünürlüğünü kontrol eden event
                         auto_use_apollo.change(
                             fn=lambda x: gr.update(visible=x),
                             inputs=auto_use_apollo,
                             outputs=auto_apollo_settings_group
                         )
 
-                        # Mid/Side model dropdown’ını kontrol eden event
                         auto_apollo_method.change(
-                            fn=lambda x: [gr.update(visible=x != i18n("mid_side_method")), gr.update(visible=x == i18n("mid_side_method"))],
+                            fn=lambda x: [
+                                gr.update(visible=x != i18n("mid_side_method")),
+                                gr.update(visible=x == i18n("mid_side_method")),
+                                "Apollo Universal Model" if x == i18n("mid_side_method") else None
+                            ],
                             inputs=auto_apollo_method,
-                            outputs=[auto_apollo_normal_model_row, auto_apollo_midside_model_row]
+                            outputs=[auto_apollo_normal_model_row, auto_apollo_midside_model_row, auto_apollo_normal_model]
                         )
 
                     with gr.Column():
@@ -614,7 +616,6 @@ def create_interface():
                                 elem_id="process-btn"
                             )
 
-        # Event handlers
         model_category.change(fn=update_model_dropdown, inputs=model_category, outputs=model_dropdown)
         clear_old_output_btn.click(fn=clear_old_output, outputs=clear_old_output_status)
 
@@ -642,11 +643,22 @@ def create_interface():
 
         auto_category_dropdown.change(fn=update_model_dropdown, inputs=auto_category_dropdown, outputs=selected_models)
 
+        def debug_inputs(*args):
+            input_names = [
+                "input_audio_file", "model_dropdown", "chunk_size", "overlap", "export_format",
+                "use_tta", "use_demud_phaseremix_inst", "extract_instrumental",
+                "use_apollo", "apollo_chunk_size", "apollo_overlap",
+                "apollo_method", "apollo_normal_model", "apollo_midside_model"
+            ]
+            for name, value in zip(input_names, args):
+                print(f"UI Input - {name}: {value}")
+            return args
+
         process_btn.click(
-            fn=process_audio,
+            fn=lambda *args: process_audio(*debug_inputs(*args)),
             inputs=[
                 input_audio_file, model_dropdown, chunk_size, overlap, export_format,
-                use_tta, use_demud_phaseremix_inst, extract_instrumental, model_dropdown,
+                use_tta, use_demud_phaseremix_inst, extract_instrumental,
                 use_apollo, apollo_chunk_size, apollo_overlap,
                 apollo_method, apollo_normal_model, apollo_midside_model
             ],
@@ -661,21 +673,21 @@ def create_interface():
         auto_process_btn.click(
             fn=auto_ensemble_process,
             inputs=[
-                auto_input_audio_file,           # auto_input_audio_file
-                selected_models,                 # selected_models
-                auto_chunk_size,                 # auto_chunk_size
-                auto_overlap,                    # auto_overlap
-                export_format2,                  # export_format
-                auto_use_tta,                    # auto_use_tta
-                auto_extract_instrumental,       # auto_extract_instrumental
-                auto_ensemble_type,              # auto_ensemble_type
-                gr.State(None),                  # _state
-                auto_use_apollo,                 # auto_use_apollo
-                auto_apollo_normal_model,        # auto_apollo_normal_model (moved up)
-                auto_apollo_chunk_size,          # auto_apollo_chunk_size
-                auto_apollo_overlap,             # auto_apollo_overlap
-                auto_apollo_method,              # auto_apollo_method
-                auto_apollo_midside_model        # auto_apollo_midside_model
+                auto_input_audio_file,
+                selected_models,
+                auto_chunk_size,
+                auto_overlap,
+                export_format2,
+                auto_use_tta,
+                auto_extract_instrumental,
+                auto_ensemble_type,
+                gr.State(None),
+                auto_use_apollo,
+                auto_apollo_normal_model,
+                auto_apollo_chunk_size,
+                auto_apollo_overlap,
+                auto_apollo_method,
+                auto_apollo_midside_model
             ],
             outputs=[auto_output_audio, ensemble_process_status, ensemble_progress_html]
         )
