@@ -11,17 +11,24 @@ from assets.i18n.i18n import I18nAuto
 
 i18n = I18nAuto()
 
+def sanitize_filename(filename):
+    # Remove special characters, replace spaces with underscores, and ensure the name is safe
+    sanitized = re.sub(r'[^a-zA-Z0-9_-]', '_', filename)
+    sanitized = re.sub(r'_+', '_', sanitized)
+    sanitized = sanitized.strip('_')
+    return sanitized
+
 def download_callback(url, download_type='direct', cookie_file=None):
-    # Geçici ve giriş dizinlerini temizle
+    # Clear temporary and input directories
     clear_temp_folder("/tmp", exclude_items=["gradio", "config.json"])
     clear_directory(INPUT_DIR)
     os.makedirs(INPUT_DIR, exist_ok=True)
 
-    # URL'nin temel doğruluğunu kontrol et (esnek hale getirildi)
+    # Validate URL (made flexible)
     if not url or not isinstance(url, str) or not (url.startswith('http://') or url.startswith('https://')):
         return None, i18n("invalid_url"), None, None, None, None
 
-    # Çerez dosyasını yükle
+    # Load cookie file
     if cookie_file is not None:
         try:
             with open(cookie_file.name, "rb") as f:
@@ -35,24 +42,26 @@ def download_callback(url, download_type='direct', cookie_file=None):
     wav_path = None
     download_success = False
 
-    # Google Drive'ı bağla
+    # Mount Google Drive
     try:
         drive.mount('/content/drive', force_remount=True)
     except Exception as e:
-        print(f"Google Drive bağlama hatası: {e}")
+        print(i18n("google_drive_mount_error").format(str(e)))
 
-    # 1. Discord CDN veya doğrudan dosya linki kontrolü
+    # 1. Check for Discord CDN or direct file links
     if any(url.endswith(ext) for ext in ['.wav', '.mp3', '.m4a', '.ogg', '.flac']):
         try:
             file_name = os.path.basename(url.split('?')[0])
-            output_path = os.path.join(INPUT_DIR, file_name)
+            # Sanitize the file name
+            sanitized_base_name = sanitize_filename(os.path.splitext(file_name)[0])
+            output_path = os.path.join(INPUT_DIR, f"{sanitized_base_name}{os.path.splitext(file_name)[1]}")
             response = requests.get(url, stream=True)
             if response.status_code == 200:
                 with open(output_path, 'wb') as f:
                     for chunk in response.iter_content(chunk_size=8192):
                         if chunk:
                             f.write(chunk)
-                # Dosya WAV değilse, FFmpeg ile WAV'a dönüştür
+                # Convert to WAV if not already WAV
                 if not file_name.endswith('.wav'):
                     wav_output = os.path.splitext(output_path)[0] + '.wav'
                     os.system(f'ffmpeg -i "{output_path}" -acodec pcm_s16le -ar 44100 "{wav_output}"')
@@ -71,7 +80,7 @@ def download_callback(url, download_type='direct', cookie_file=None):
             print(error_msg)
             return None, error_msg, None, None, None, None
 
-    # 2. Google Drive linki kontrolü
+    # 2. Check for Google Drive links
     elif 'drive.google.com' in url:
         try:
             file_id = re.search(r'/d/([^/]+)', url)
@@ -79,7 +88,11 @@ def download_callback(url, download_type='direct', cookie_file=None):
             output_path = os.path.join(INPUT_DIR, "drive_download.wav")
             gdown.download(f'https://drive.google.com/uc?id={file_id}', output_path, quiet=True)
             if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
-                wav_path = output_path
+                # Sanitize the file name
+                sanitized_base_name = sanitize_filename("drive_download")
+                sanitized_output_path = os.path.join(INPUT_DIR, f"{sanitized_base_name}.wav")
+                os.rename(output_path, sanitized_output_path)
+                wav_path = sanitized_output_path
                 download_success = True
             else:
                 raise Exception(i18n("file_size_zero_error"))
@@ -88,7 +101,7 @@ def download_callback(url, download_type='direct', cookie_file=None):
             print(error_msg)
             return None, error_msg, None, None, None, None
 
-    # 3. YouTube ve diğer medya linkleri için yt-dlp
+    # 3. Use yt-dlp for YouTube and other media links
     else:
         ydl_opts = {
             'format': 'bestaudio/best',
@@ -107,8 +120,14 @@ def download_callback(url, download_type='direct', cookie_file=None):
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info_dict = ydl.extract_info(url, download=True)
                 temp_path = ydl.prepare_filename(info_dict)
-                wav_path = os.path.splitext(temp_path)[0] + '.wav'
-                if os.path.exists(wav_path):
+                # Sanitize the file name before conversion
+                base_name = os.path.splitext(os.path.basename(temp_path))[0]
+                sanitized_base_name = sanitize_filename(base_name)
+                wav_path = os.path.join(INPUT_DIR, f"{sanitized_base_name}.wav")
+                # Rename the file after yt-dlp conversion
+                temp_wav = os.path.splitext(temp_path)[0] + '.wav'
+                if os.path.exists(temp_wav):
+                    os.rename(temp_wav, wav_path)
                     download_success = True
                 else:
                     raise Exception(i18n("wav_conversion_failed"))
@@ -117,20 +136,20 @@ def download_callback(url, download_type='direct', cookie_file=None):
             print(error_msg)
             return None, error_msg, None, None, None, None
 
-    # Başarılı indirme sonrası işlemleri
+    # Post-download processing if successful
     if download_success and wav_path:
-        # Gereksiz dosyaları temizle
+        # Clean up unnecessary files
         for f in os.listdir(INPUT_DIR):
             if f != os.path.basename(wav_path):
                 os.remove(os.path.join(INPUT_DIR, f))
         
-        # Dosyayı Google Drive'a kopyala
+        # Copy file to Google Drive
         try:
-            drive_path = '/content/drive/My Drive/' + os.path.basename(wav_path)
+            drive_path = os.path.join('/content/drive/My Drive', os.path.basename(wav_path))
             shutil.copy(wav_path, drive_path)
-            print(f"Dosya Google Drive'a kopyalandı: {drive_path}")
+            print(i18n("file_copied_to_drive").format(drive_path))
         except Exception as e:
-            print(f"Google Drive'a kopyalama hatası: {e}")
+            print(i18n("copy_to_drive_error").format(str(e)))
 
         return (
             wav_path,
