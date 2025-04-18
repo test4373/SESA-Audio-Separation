@@ -282,6 +282,13 @@
   "apollo_enhancement_info": "Ses kalitesi iyileştirme",
   "apollo_processing_method": "Apollo işlem metodu",
   "apollo_mid_side_model": "Apollo orta/yan için modeller",
+  "selected_models": "Seçilecek modeller",
+  "save_preset": "Ön ayarı kaydet",
+  "delete_preset": "Ön ayyarı sil",
+  "refresh_presets": "Ön ayarları güncelle",
+  "presets_name": "ön ayar ismi",
+  "select_preset": "Ön ayarlar",
+  "add_favorite": "favorilere ekle",
   "apollo_midside_model_info": "Orta/yan işleme için kullanılacak model (isteğe bağlı)",
   "language_changed_message": "Dil değiştirildi. Lütfen hücreyi yeniden başlat."
 }
