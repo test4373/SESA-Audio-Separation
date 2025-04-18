@@ -75,8 +75,22 @@ def tuple_constructor(loader, node):
 yaml.SafeLoader.add_constructor('tag:yaml.org,2002:python/tuple', tuple_constructor)
 
 def clean_model(model):
-    """Remove special characters like ⭐ from model names."""
-    return model.replace(" ⭐", "") if model else None
+    """
+    Cleans a model name by removing unwanted characters like ⭐ and extra whitespace.
+    
+    Args:
+        model (str): The model name to clean.
+    
+    Returns:
+        str: The cleaned model name, or None if input is invalid.
+    """
+    if not model or not isinstance(model, str):
+        return None
+    # Remove ⭐ and extra whitespace
+    cleaned = model.replace("⭐", "").strip()
+    # Remove any additional unwanted characters if needed
+    cleaned = cleaned.replace("\t", " ").replace("\n", " ")
+    return cleaned
 
 def get_original_category(translated_category):
     for original_cat in MODEL_CONFIGS.keys():
