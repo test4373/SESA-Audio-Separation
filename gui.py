@@ -7,12 +7,15 @@ from datetime import datetime
 import json
 import sys
 import time
-from helpers import update_model_dropdown, handle_file_upload, clear_old_output, save_uploaded_file, update_file_list
+import random
+from helpers import update_model_dropdown, handle_file_upload, clear_old_output, save_uploaded_file, update_file_list, clean_model
 from download import download_callback
 from model import get_model_config, MODEL_CONFIGS
 from processing import process_audio, auto_ensemble_process, ensemble_audio_fn, refresh_auto_output, copy_ensemble_to_drive, copy_to_drive
 from assets.i18n.i18n import I18nAuto
-from config_manager import load_config, save_config, update_favorites, save_preset, delete_preset, clean_model
+from config_manager import load_config, save_config, update_favorites, save_preset, delete_preset
+import logging
+logging.basicConfig(filename='sesa_gui.log', level=logging.DEBUG)
 
 # BASE_DIR tanımı
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -20,13 +23,59 @@ CONFIG_DIR = os.path.join(BASE_DIR, "assets")
 CONFIG_FILE = os.path.join(CONFIG_DIR, "config.json")
 URL_FILE = os.path.join(CONFIG_DIR, "last_url.txt")
 
+# Load user config at startup
+user_config = load_config()
+initial_settings = user_config["settings"]
+initial_favorites = user_config["favorites"]
+initial_presets = user_config["presets"]
+
+# Ensure auto_category is valid
+if "auto_category" not in initial_settings or initial_settings["auto_category"] not in MODEL_CONFIGS:
+    initial_settings["auto_category"] = "Vocal Models"
+
 # Config dosyası yoksa oluştur
+# Create or update config file
 if not os.path.exists(CONFIG_FILE):
-    default_config = {"lang": {"override": False, "selected_lang": "auto"}}
+    default_config = {
+        "lang": {"override": False, "selected_lang": "auto"},
+        "sharing": {
+            "method": "gradio",
+            "ngrok_token": "",
+            "port": random.randint(1000, 9000)  # Random port instead of fixed
+        }
+    }
     os.makedirs(CONFIG_DIR, exist_ok=True)
     with open(CONFIG_FILE, "w", encoding="utf-8") as f:
         json.dump(default_config, f, indent=2)
-    print(f"Created config.json at: {CONFIG_FILE}")
+else:  # If the file exists, load and update if necessary
+    try:
+        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+            config = json.load(f)
+        # Ensure 'lang' key exists
+        if "lang" not in config: # check if "lang" key exists
+            config["lang"] = {"override": False, "selected_lang": "auto"} # add it if not present
+        # Add 'sharing' key if it doesn't exist
+        if "sharing" not in config:
+            config["sharing"] = {
+                "method": "gradio",
+                "ngrok_token": "",
+                "port": random.randint(1000, 9000)  # Random port instead of fixed
+            }
+        # Save the updated configuration
+        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+            json.dump(config, f, indent=2)
+    except json.JSONDecodeError:  # Handle corrupted JSON
+        print("Warning: config.json is corrupted. Creating a new one.")
+        default_config = {
+            "lang": {"override": False, "selected_lang": "auto"},
+            "sharing": {
+                "method": "gradio",
+                "ngrok_token": "",
+                "port": random.randint(1000, 9000)  # Random port instead of fixed
+            }
+        }
+        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+            json.dump(default_config, f, indent=2)
 
 # I18nAuto örneği (arayüz başlamadan önce dil yüklenir)
 i18n = I18nAuto()
@@ -185,10 +234,10 @@ def create_interface():
 
                             with gr.Row():
                                 model_category = gr.Dropdown(
-                                    label=i18n("category"),
-                                    choices=[i18n(cat) for cat in MODEL_CONFIGS.keys()],
-                                    value=i18n(initial_settings["model_category"])
-                                )
+                                label=i18n("category"),
+                                choices=[i18n(cat) for cat in MODEL_CONFIGS.keys()],
+                                value=i18n(initial_settings["model_category"])
+                            )
                                 favorite_button = gr.Button(i18n("add_favorite"), variant="secondary", scale=0)
 
                             model_dropdown = gr.Dropdown(
@@ -512,11 +561,10 @@ def create_interface():
                                     value=i18n("Vocal Models")
                                 )
                                 selected_models = gr.Dropdown(
-                                    label=i18n("select_models"),
-                                    choices=update_model_dropdown(i18n("Vocal Models"), favorites=initial_favorites)["choices"],
-                                    multiselect=True,
-                                    max_choices=50,
-                                    interactive=True
+                                    label=i18n("selected_models"),
+                                    choices=update_model_dropdown(i18n(initial_settings["auto_category"]), favorites=initial_favorites)["choices"],
+                                    value=initial_settings["selected_models"],
+                                    multiselect=True
                                 )
 
                             with gr.Row():
@@ -551,13 +599,17 @@ def create_interface():
 
                         auto_process_btn = gr.Button(i18n("start_processing"), variant="primary")
 
-                        def load_preset(preset_name, presets, category):
+                        def load_preset(preset_name, presets, category, favorites):
                             if preset_name and preset_name in presets:
                                 preset = presets[preset_name]
+                                # Mark starred models with ⭐
+                                favorite_models = [f"{model} ⭐" if model in favorites else model for model in preset["models"]]
+                                print(f"Preset '{preset_name}' loaded with models: {favorite_models}")
                                 return (
-                                    gr.update(value=[clean_model(model) for model in preset["models"]]),
+                                    gr.update(value=favorite_models),
                                     gr.update(value=preset["ensemble_method"])
                                 )
+                            print(f"Preset '{preset_name}' not found.")
                             return gr.update(), gr.update()
 
                         def sync_presets():
@@ -567,20 +619,23 @@ def create_interface():
 
                         preset_dropdown.change(
                             fn=load_preset,
-                            inputs=[preset_dropdown, presets_state, auto_category_dropdown],
+                            inputs=[preset_dropdown, presets_state, auto_category_dropdown, favorites_state],
                             outputs=[selected_models, auto_ensemble_type]
                         )
 
-                        def handle_save_preset(preset_name, models, ensemble_method, presets):
-                            if not preset_name or not models:
-                                return gr.update(), presets
+                        def handle_save_preset(preset_name, models, ensemble_method, presets, favorites):
+                            if not preset_name:
+                                return gr.update(), presets, i18n("no_preset_name_provided")
+                            if not models and not favorites:
+                                return gr.update(), presets, i18n("no_models_selected_for_preset")
                             new_presets = save_preset(presets, preset_name, models, ensemble_method)
-                            save_config(load_config()["favorites"], load_config()["settings"], new_presets)
-                            return gr.update(choices=list(new_presets.keys()), value=None), new_presets
+                            save_config(favorites, load_config()["settings"], new_presets)
+                            print(f"Preset dropdown updated with choices: {list(new_presets.keys())}")
+                            return gr.update(choices=list(new_presets.keys()), value=None), new_presets, i18n("preset_saved").format(preset_name)
 
                         save_preset_btn.click(
                             fn=handle_save_preset,
-                            inputs=[preset_name_input, selected_models, auto_ensemble_type, presets_state],
+                            inputs=[preset_name_input, selected_models, auto_ensemble_type, presets_state, favorites_state],
                             outputs=[preset_dropdown, presets_state]
                         )
 
@@ -775,8 +830,12 @@ def create_interface():
             return output_audio, status, progress_html
 
         def update_category_dropdowns(cat):
-            choices = update_model_dropdown(cat, favorites=load_config()["favorites"])["choices"]
-            return gr.update(choices=choices), gr.update(choices=choices)
+            logging.debug(f"Input category: {cat}")
+            eng_cat = next((k for k in MODEL_CONFIGS.keys() if i18n(k) == cat), list(MODEL_CONFIGS.keys())[0])
+            logging.debug(f"Using English category: {eng_cat}")
+            choices = update_model_dropdown(eng_cat, favorites=load_config()["favorites"])["choices"]
+            logging.debug(f"Model choices: {choices}")
+            return gr.update(choices=choices), gr.update(choices=choices)   
 
         model_category.change(
             fn=update_category_dropdowns,
@@ -809,7 +868,7 @@ def create_interface():
         )
 
         auto_category_dropdown.change(
-            fn=lambda cat: gr.update(choices=update_model_dropdown(cat, favorites=load_config()["favorites"])["choices"]),
+            fn=lambda cat: gr.update(choices=update_model_dropdown(next((k for k in MODEL_CONFIGS.keys() if i18n(k) == cat), list(MODEL_CONFIGS.keys())[0]), favorites=load_config()["favorites"])["choices"]),
             inputs=auto_category_dropdown,
             outputs=selected_models
         )
