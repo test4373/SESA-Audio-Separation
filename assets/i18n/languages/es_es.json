@@ -261,6 +261,13 @@
   "apollo_normal_model_info": "Modelo a usar para procesamiento Apollo normal",
   "apollo_midside_model": "Modelo Apollo centro/lateral",
   "apollo_enhancement_info": "Mejora de la calidad del sonido",
+  "selected_models": "Modelos Seleccionados",
+  "save_preset": "Guardar Preajuste",
+  "delete_preset": "Eliminar Preajuste",
+  "refresh_presets": "Actualizar Preajustes",
+  "presets_name": "Nombre del Preajuste",
+  "select_preset": "Seleccionar Preajuste",
+  "add_favorite": "Añadir a Favoritos",
   "apollo_midside_model_info": "Modelo a usar para procesamiento centro/lateral (opcional)",
   "language_changed_message": "Idioma cambiado. Por favor, reinicia la celda."
 }
