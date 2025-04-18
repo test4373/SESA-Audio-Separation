@@ -72,11 +72,26 @@ def get_original_category(translated_category):
             return original_cat
     return None
 
-def update_model_dropdown(category):
-    original_category = get_original_category(category)
-    if original_category is None:
-        raise ValueError(f"Kategori bulunamadı: {category}")
-    return gr.Dropdown(choices=list(MODEL_CONFIGS[original_category].keys()), label=i18n("model"))
+def update_model_dropdown(category, favorites=None):
+    """Update model dropdown choices, with favorites prefixed by ⭐ and sorted to top."""
+    if favorites is None:
+        favorites = []
+    
+    # Get models for the selected category
+    models = list(MODEL_CONFIGS.get(category, {}).keys())
+    
+    # Separate favorites and non-favorites
+    favorite_models = [model for model in models if model in favorites]
+    non_favorite_models = [model for model in models if model not in favorites]
+    
+    # Add ⭐ prefix to favorites
+    favorite_choices = [f"⭐ {model}" for model in favorite_models]
+    non_favorite_choices = non_favorite_models
+    
+    # Combine with favorites first
+    choices = favorite_choices + non_favorite_choices
+    
+    return {"choices": choices}
 
 def handle_file_upload(uploaded_file, file_path, is_auto_ensemble=False):
     clear_temp_folder("/tmp", exclude_items=["gradio", "config.json"])
