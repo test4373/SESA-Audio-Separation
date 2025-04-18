@@ -265,7 +265,7 @@
   "save_preset": "حفظ الإعداد المسبق",
   "delete_preset": "حذف الإعداد المسبق",
   "refresh_presets": "تحديث الإعدادات المسبقة",
-  "presets_name": "اسم الإعداد المسبق",
+  "preset_name": "اسم الإعداد المسبق",
   "select_preset": "اختيار إعداد مسبق",
   "add_favorite": "إضافة إلى المفضلة",
   "apollo_midside_model_info": "النموذج المستخدم لمعالجة الوسط/الجانب (اختياري)",
