@@ -261,6 +261,13 @@
   "apollo_normal_model_info": "Модель, используемая для обычной обработки Apollo",
   "apollo_midside_model": "Модель Apollo середины/сторон",
   "apollo_enhancement_info": "Улучшение качества звука",
+  "selected_models": "Выбранные модели",
+  "save_preset": "Сохранить пресет",
+  "delete_preset": "Удалить пресет",
+  "refresh_presets": "Обновить пресеты",
+  "presets_name": "Имя пресета",
+  "select_preset": "Выбрать пресет",
+  "add_favorite": "Добавить в избранное",
   "apollo_midside_model_info": "Модель, используемая для обработки середины/сторон (опционально)",
   "language_changed_message": "Язык изменен. Пожалуйста, перезапустите ячейку."
 }
