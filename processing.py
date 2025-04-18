@@ -32,32 +32,38 @@ from tqdm import tqdm
 from google.oauth2.credentials import Credentials
 import tempfile
 from urllib.parse import urlparse, quote
-from clean_model import clean_model_name, shorten_filename, clean_filename
 from google.colab import drive
 
 import warnings
 warnings.filterwarnings("ignore")
 
-# BASE_DIR'i dinamik olarak güncel dizine ayarla
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 INFERENCE_PATH = os.path.join(BASE_DIR, "inference.py")
 ENSEMBLE_PATH = os.path.join(BASE_DIR, "ensemble.py")
 OUTPUT_DIR = os.path.join(BASE_DIR, "output")
 AUTO_ENSEMBLE_OUTPUT = os.path.join(BASE_DIR, "ensemble_output")
 
+def sanitize_filename(filename):
+    base, ext = os.path.splitext(filename)
+    base = re.sub(r'\.+', '_', base)
+    base = re.sub(r'[#<>:"/\\|?*]', '_', base)
+    base = re.sub(r'\s+', '_', base)
+    base = re.sub(r'_+', '_', base)
+    base = base.strip('_')
+    return f"{base}{ext}"
+
 def copy_ensemble_to_drive():
-    """Copies the latest ensemble output file to Google Drive if mounted."""
     try:
         if not os.path.exists('/content/drive'):
             drive.mount('/content/drive')
-            status = "Google Drive mounted. Copying ensemble output..."
+            status = i18n("drive_mounted_copying_ensemble")
         else:
-            status = "Google Drive already mounted. Copying ensemble output..."
+            status = i18n("drive_already_mounted_copying_ensemble")
 
         source_dir = AUTO_ENSEMBLE_OUTPUT
         output_files = glob.glob(os.path.join(source_dir, "*.wav"))
         if not output_files:
-            return "❌ No ensemble output files found."
+            return i18n("no_ensemble_output_files_found")
 
         latest_file = max(output_files, key=os.path.getctime)
         filename = os.path.basename(latest_file)
@@ -67,18 +73,17 @@ def copy_ensemble_to_drive():
         dest_path = os.path.join(dest_dir, filename)
 
         shutil.copy2(latest_file, dest_path)
-        return f"✅ Ensemble output copied to {dest_path}"
+        return i18n("ensemble_output_copied").format(dest_path)
     except Exception as e:
-        return f"❌ Error copying ensemble output: {str(e)}"
+        return i18n("error_copying_ensemble_output").format(str(e))
 
 def copy_to_drive():
-    """Copies processed files from OUTPUT_DIR to Google Drive if mounted."""
     try:
         if not os.path.exists('/content/drive'):
             drive.mount('/content/drive')
-            status = "Google Drive mounted. Copying files..."
+            status = i18n("drive_mounted_copying_files")
         else:
-            status = "Google Drive already mounted. Copying files..."
+            status = i18n("drive_already_mounted_copying_files")
 
         source_dir = OUTPUT_DIR
         dest_dir = "/content/drive/MyDrive/SESA_Output"
@@ -90,12 +95,11 @@ def copy_to_drive():
             if os.path.isfile(src_path):
                 shutil.copy2(src_path, dest_path)
 
-        return f"✅ Files copied to {dest_dir}"
+        return i18n("files_copied_to_drive").format(dest_dir)
     except Exception as e:
-        return f"❌ Error copying files: {str(e)}"
+        return i18n("error_copying_files").format(str(e))
 
 def refresh_auto_output():
-    """AUTO_ENSEMBLE_OUTPUT dizinindeki en son dosyayı bulur ve döndürür."""
     try:
         output_files = glob.glob(os.path.join(AUTO_ENSEMBLE_OUTPUT, "*.wav"))
         if not output_files:
@@ -106,21 +110,55 @@ def refresh_auto_output():
     except Exception as e:
         return None, i18n("error_refreshing_output").format(str(e))
 
-def extract_model_name(full_model_string):
-    """Bir dizeden temiz model adını çıkarır."""
-    if not full_model_string:
-        return ""
-    cleaned = str(full_model_string)
-    if ' - ' in cleaned:
-        cleaned = cleaned.split(' - ')[0]
-    emoji_prefixes = ['✅ ', '👥 ', '🗣️ ', '🏛️ ', '🔇 ', '🔉 ', '🎬 ', '🎼 ', '✅(?) ']
-    for prefix in emoji_prefixes:
-        if cleaned.startswith(prefix):
-            cleaned = cleaned[len(prefix):]
-    return cleaned.strip()
+def sanitize_filename(filename):
+    base, ext = os.path.splitext(filename)
+    base = re.sub(r'\.+', '_', base)
+    base = re.sub(r'[#<>:"/\\|?*]', '_', base)
+    base = re.sub(r'\s+', '_', base)
+    base = re.sub(r'_+', '_', base)
+    base = base.strip('_')
+    return f"{base}{ext}"
 
-def run_command_and_process_files(model_type, config_path, start_check_point, INPUT_DIR, OUTPUT_DIR, extract_instrumental, use_tta, demud_phaseremix_inst, clean_model, progress=gr.Progress(), use_apollo=True, apollo_normal_model="Apollo Universal Model", chunk_size=19, overlap=2, apollo_method="Normal Method", apollo_midside_model=None, output_format="wav"):
+def clamp_percentage(value):
+    """Helper function to clamp percentage values to the 0-100 range."""
     try:
+        return min(max(float(value), 0), 100)
+    except (ValueError, TypeError):
+        print(f"Warning: Invalid percentage value {value}, defaulting to 0")
+        return 0
+
+def update_progress_html(progress_label, progress_percent):
+    """Helper function to generate progress HTML with clamped percentage."""
+    progress_percent = clamp_percentage(progress_percent)
+    if progress_percent > 100:
+        print(f"Warning: Progress percent {progress_percent} exceeds 100, clamping to 100")
+    return f"""
+    <div id="custom-progress" style="margin-top: 10px;">
+        <div style="font-size: 1rem; color: #C0C0C0; margin-bottom: 5px;" id="progress-label">{progress_label}</div>
+        <div style="width: 100%; background-color: #444; border-radius: 5px; overflow: hidden;">
+            <div id="progress-bar" style="width: {progress_percent}%; height: 20px; background-color: #6e8efb; transition: width 0.3s; max-width: 100%;"></div>
+        </div>
+    </div>
+    """
+
+def extract_model_name_from_checkpoint(checkpoint_path):
+    if not checkpoint_path:
+        return "Unknown"
+    base_name = os.path.basename(checkpoint_path)
+    model_name = os.path.splitext(base_name)[0]
+    print(f"Original checkpoint path: {checkpoint_path}, extracted model_name: {model_name}")
+    return model_name.strip()
+
+def run_command_and_process_files(model_type, config_path, start_check_point, INPUT_DIR, OUTPUT_DIR, extract_instrumental, use_tta, demud_phaseremix_inst, progress=gr.Progress(), use_apollo=True, apollo_normal_model="Apollo Universal Model", chunk_size=19, overlap=2, apollo_method="normal_method", apollo_midside_model=None, output_format="wav"):
+    try:
+        print(f"run_command_and_process_files: model_type={model_type}, config_path={config_path}, start_check_point={start_check_point}")
+        if not config_path:
+            raise ValueError(f"Configuration path is empty for model_type: {model_type}")
+        if not os.path.exists(config_path):
+            raise FileNotFoundError(f"Configuration file not found: {config_path}")
+        if not start_check_point or not os.path.exists(start_check_point):
+            raise FileNotFoundError(f"Checkpoint file not found: {start_check_point}")
+
         cmd_parts = [
             "python", INFERENCE_PATH,
             "--model_type", model_type,
@@ -136,7 +174,7 @@ def run_command_and_process_files(model_type, config_path, start_check_point, IN
         if demud_phaseremix_inst:
             cmd_parts.append("--demud_phaseremix_inst")
 
-        # Normal ses ayrıştırma
+        print(f"Running command: {' '.join(cmd_parts)}")
         process = subprocess.Popen(
             cmd_parts,
             cwd=BASE_DIR,
@@ -147,16 +185,21 @@ def run_command_and_process_files(model_type, config_path, start_check_point, IN
             universal_newlines=True
         )
 
+        # Initialize progress for separation phase (0-80%)
         progress(0, desc=i18n("starting_audio_separation"), total=100)
-        progress_bar = tqdm(total=100, desc=i18n("processing_audio"), unit="%")
+        progress_bar = tqdm(total=80, desc=i18n("processing_audio"), unit="%")
+        stderr_output = ""
 
         for line in process.stdout:
             print(line.strip())
             if "Progress:" in line:
                 try:
                     percentage = float(re.search(r"Progress: (\d+\.\d+)%", line).group(1))
-                    progress(percentage, desc=i18n("separating_audio").format(percentage))
-                    progress_bar.n = percentage
+                    # Scale separation progress to 0-80%
+                    scaled_percentage = clamp_percentage(percentage * 0.8)
+                    progress_label = i18n("separating_audio").format(scaled_percentage)
+                    progress(scaled_percentage, desc=progress_label)
+                    progress_bar.n = scaled_percentage
                     progress_bar.refresh()
                 except (AttributeError, ValueError) as e:
                     print(i18n("progress_parsing_error").format(e))
@@ -164,13 +207,17 @@ def run_command_and_process_files(model_type, config_path, start_check_point, IN
                 progress(0, desc=line.strip())
 
         for line in process.stderr:
+            stderr_output += line
             print(line.strip())
 
         process.wait()
         progress_bar.close()
-        progress(100, desc=i18n("separation_complete"))
+        progress(80, desc=i18n("separation_complete"))
 
-        filename_model = clean_model_name(clean_model)
+        if process.returncode != 0:
+            raise RuntimeError(f"inference.py failed: {stderr_output}")
+
+        filename_model = extract_model_name_from_checkpoint(start_check_point)
 
         def rename_files_with_model(folder, filename_model):
             for filename in sorted(os.listdir(folder)):
@@ -178,14 +225,25 @@ def run_command_and_process_files(model_type, config_path, start_check_point, IN
                 if not any(filename.lower().endswith(ext) for ext in ['.mp3', '.wav', '.flac', '.aac', '.ogg', '.m4a']):
                     continue
                 base, ext = os.path.splitext(filename)
-                clean_base = base.strip('_- ')
-                new_filename = f"{clean_base}_{filename_model}{ext}"
+                detected_type = None
+                for type_key in ['vocals', 'instrumental', 'phaseremix', 'drum', 'bass', 'other', 'effects', 'speech', 'music', 'dry', 'male', 'female', 'bleed', 'karaoke']:
+                    if type_key in base.lower():
+                        detected_type = type_key
+                        break
+                type_suffix = detected_type.capitalize() if detected_type else "Processed"
+                clean_base = sanitize_filename(base.split('_')[0]).rsplit('.', 1)[0]
+                new_filename = f"{clean_base}_{type_suffix}_{filename_model}{ext}"
                 new_file_path = os.path.join(folder, new_filename)
-                os.rename(file_path, new_file_path)
+                try:
+                    os.rename(file_path, new_file_path)
+                except Exception as e:
+                    print(f"Failed to rename {file_path} to {new_file_path}: {str(e)}")
 
         rename_files_with_model(OUTPUT_DIR, filename_model)
 
         output_files = os.listdir(OUTPUT_DIR)
+        if not output_files:
+            raise FileNotFoundError("No output files generated in OUTPUT_DIR")
 
         def find_file(keyword):
             matching_files = [
@@ -201,44 +259,41 @@ def run_command_and_process_files(model_type, config_path, start_check_point, IN
             find_file('female'), find_file('bleed'), find_file('karaoke')
         ]
 
-        # Normal çıktılar için normalizasyon ve amplifikasyon kaldırıldı
         normalized_outputs = []
         for output_file in output_list:
             if output_file and os.path.exists(output_file):
-                # Dosyayı olduğu gibi kullan
-                normalized_file = os.path.join(OUTPUT_DIR, f"{os.path.splitext(os.path.basename(output_file))[0]}.{output_format}")
-                # Eğer dosya zaten istenen formattaysa ve aynı dosya değilse kopyala
+                normalized_file = os.path.join(OUTPUT_DIR, f"{sanitize_filename(os.path.splitext(os.path.basename(output_file))[0])}.{output_format}")
                 if output_file.endswith(f".{output_format}") and output_file != normalized_file:
                     shutil.copy(output_file, normalized_file)
                 elif output_file != normalized_file:
                     audio, sr = librosa.load(output_file, sr=None, mono=False)
                     sf.write(normalized_file, audio.T if audio.ndim > 1 else audio, sr)
                 else:
-                    # Eğer kaynak ve hedef aynıysa, kopyalamayı atla
                     normalized_file = output_file
                 normalized_outputs.append(normalized_file)
             else:
                 normalized_outputs.append(output_file)
 
-        # Apollo ile kalite artırma
+        # Only process Apollo if use_apollo is True
         if use_apollo:
             apollo_script = "/content/Apollo/inference.py"
 
-            # Model seçimi
-            if apollo_method == i18n("normal_method"):
-                if apollo_normal_model == "MP3 Enhancer":
+            print(f"Apollo parameters - chunk_size: {chunk_size}, overlap: {overlap}, method: {apollo_method}, normal_model: {apollo_normal_model}, midside_model: {apollo_midside_model}")
+
+            if apollo_method == "mid_side_method":
+                if apollo_midside_model == "MP3 Enhancer":
                     ckpt = "/content/Apollo/model/pytorch_model.bin"
                     config = "/content/Apollo/configs/apollo.yaml"
-                elif apollo_normal_model == "Lew Vocal Enhancer":
+                elif apollo_midside_model == "Lew Vocal Enhancer":
                     ckpt = "/content/Apollo/model/apollo_model.ckpt"
                     config = "/content/Apollo/configs/apollo.yaml"
-                elif apollo_normal_model == "Lew Vocal Enhancer v2 (beta)":
+                elif apollo_midside_model == "Lew Vocal Enhancer v2 (beta)":
                     ckpt = "/content/Apollo/model/apollo_model_v2.ckpt"
                     config = "/content/Apollo/configs/config_apollo_vocal.yaml"
-                else:  # Apollo Universal Model varsayılan
+                else:
                     ckpt = "/content/Apollo/model/apollo_universal_model.ckpt"
                     config = "/content/Apollo/configs/config_apollo.yaml"
-            else:  # Mid/Side metod
+            else:
                 if apollo_normal_model == "MP3 Enhancer":
                     ckpt = "/content/Apollo/model/pytorch_model.bin"
                     config = "/content/Apollo/configs/apollo.yaml"
@@ -248,104 +303,94 @@ def run_command_and_process_files(model_type, config_path, start_check_point, IN
                 elif apollo_normal_model == "Lew Vocal Enhancer v2 (beta)":
                     ckpt = "/content/Apollo/model/apollo_model_v2.ckpt"
                     config = "/content/Apollo/configs/config_apollo_vocal.yaml"
-                else:  # Apollo Universal Model varsayılan
+                else:
                     ckpt = "/content/Apollo/model/apollo_universal_model.ckpt"
                     config = "/content/Apollo/configs/config_apollo.yaml"
 
-            # Model dosyalarının varlığını kontrol et
             if not os.path.exists(ckpt):
                 raise FileNotFoundError(f"Apollo checkpoint file not found: {ckpt}")
             if not os.path.exists(config):
                 raise FileNotFoundError(f"Apollo config file not found: {config}")
 
             enhanced_files = []
-            for output_file in normalized_outputs:
+            total_files = len([f for f in normalized_outputs if f and os.path.exists(f)])
+            progress_per_file = 20 / total_files if total_files > 0 else 20  # 80-100% for Apollo
+
+            for idx, output_file in enumerate(normalized_outputs):
                 if output_file and os.path.exists(output_file):
-                    original_file_name = os.path.splitext(os.path.basename(output_file))[0]
-                    enhanced_output = os.path.join(OUTPUT_DIR, f"{original_file_name}_enhanced.{output_format}")
+                    original_file_name = sanitize_filename(os.path.splitext(os.path.basename(output_file))[0])
+                    enhancement_suffix = "_Mid_Side_Enhanced" if apollo_method == "mid_side_method" else "_Enhanced"
+                    enhanced_output = os.path.join(OUTPUT_DIR, f"{original_file_name}{enhancement_suffix}.{output_format}")
 
                     try:
-                        if apollo_method == i18n("mid_side_method") and apollo_midside_model:
-                            # Mid/Side işleme
+                        # Update progress for Apollo processing
+                        current_progress = 80 + (idx * progress_per_file)
+                        current_progress = clamp_percentage(current_progress)
+                        progress(current_progress, desc=f"Enhancing with Apollo... ({idx+1}/{total_files})")
+
+                        if apollo_method == "mid_side_method":
                             audio, sr = librosa.load(output_file, mono=False, sr=None)
-                            if audio.ndim == 1:  # Mono ise stereo yap
+                            if audio.ndim == 1:
                                 audio = np.array([audio, audio])
 
-                            mid = (audio[0] + audio[1]) * 0.5  # Merkez kanal
-                            side = (audio[0] - audio[1]) * 0.5  # Yan kanal
+                            mid = (audio[0] + audio[1]) * 0.5
+                            side = (audio[0] - audio[1]) * 0.5
 
-                            mid_file = os.path.join(OUTPUT_DIR, "mid_temp.wav")
-                            side_file = os.path.join(OUTPUT_DIR, "side_temp.wav")
+                            mid_file = os.path.join(OUTPUT_DIR, f"{original_file_name}_mid_temp.wav")
+                            side_file = os.path.join(OUTPUT_DIR, f"{original_file_name}_side_temp.wav")
                             sf.write(mid_file, mid, sr)
                             sf.write(side_file, side, sr)
 
-                            # Mid için Apollo
                             mid_output = os.path.join(OUTPUT_DIR, f"{original_file_name}_mid_enhanced.{output_format}")
                             command_mid = [
                                 "python", apollo_script,
                                 "--in_wav", mid_file,
                                 "--out_wav", mid_output,
-                                "--chunk_size", str(chunk_size),
-                                "--overlap", str(overlap),
+                                "--chunk_size", str(int(chunk_size)),
+                                "--overlap", str(int(overlap)),
                                 "--ckpt", ckpt,
                                 "--config", config
                             ]
+                            print(f"Running Apollo Mid command: {' '.join(command_mid)}")
                             result_mid = subprocess.run(command_mid, capture_output=True, text=True)
                             if result_mid.returncode != 0:
                                 print(f"Apollo Mid processing failed: {result_mid.stderr}")
                                 enhanced_files.append(output_file)
                                 continue
 
-                            # Side için Apollo
                             side_output = os.path.join(OUTPUT_DIR, f"{original_file_name}_side_enhanced.{output_format}")
-                            if apollo_midside_model == "MP3 Enhancer":
-                                side_ckpt = "/content/Apollo/model/pytorch_model.bin"
-                                side_config = "/content/Apollo/configs/apollo.yaml"
-                            elif apollo_midside_model == "Lew Vocal Enhancer":
-                                side_ckpt = "/content/Apollo/model/apollo_model.ckpt"
-                                side_config = "/content/Apollo/configs/apollo.yaml"
-                            elif apollo_midside_model == "Lew Vocal Enhancer v2 (beta)":
-                                side_ckpt = "/content/Apollo/model/apollo_model_v2.ckpt"
-                                side_config = "/content/Apollo/configs/config_apollo_vocal.yaml"
-                            else:
-                                side_ckpt = "/content/Apollo/model/apollo_universal_model.ckpt"
-                                side_config = "/content/Apollo/configs/config_apollo.yaml"
-
-                            # Side model dosyalarının varlığını kontrol et
-                            if not os.path.exists(side_ckpt):
-                                print(f"Apollo Side checkpoint file not found: {side_ckpt}")
-                                enhanced_files.append(output_file)
-                                continue
-                            if not os.path.exists(side_config):
-                                print(f"Apollo Side config file not found: {side_config}")
-                                enhanced_files.append(output_file)
-                                continue
-
                             command_side = [
                                 "python", apollo_script,
                                 "--in_wav", side_file,
                                 "--out_wav", side_output,
-                                "--chunk_size", str(chunk_size),
-                                "--overlap", str(overlap),
-                                "--ckpt", side_ckpt,
-                                "--config", side_config
+                                "--chunk_size", str(int(chunk_size)),
+                                "--overlap", str(int(overlap)),
+                                "--ckpt", ckpt,
+                                "--config", config
                             ]
+                            print(f"Running Apollo Side command: {' '.join(command_side)}")
                             result_side = subprocess.run(command_side, capture_output=True, text=True)
                             if result_side.returncode != 0:
                                 print(f"Apollo Side processing failed: {result_side.stderr}")
                                 enhanced_files.append(output_file)
                                 continue
 
-                            # Mid ve Side’ı birleştir
+                            if not (os.path.exists(mid_output) and os.path.exists(side_output)):
+                                print(f"Apollo outputs missing: mid={mid_output}, side={side_output}")
+                                enhanced_files.append(output_file)
+                                continue
+
                             mid_audio, _ = librosa.load(mid_output, sr=sr, mono=True)
                             side_audio, _ = librosa.load(side_output, sr=sr, mono=True)
                             left = mid_audio + side_audio
                             right = mid_audio - side_audio
                             combined = np.array([left, right])
+
+                            os.makedirs(os.path.dirname(enhanced_output), exist_ok=True)
                             sf.write(enhanced_output, combined.T, sr)
 
-                            # Geçici dosyaları güvenli bir şekilde temizle
-                            for temp_file in [mid_file, side_file, mid_output, side_output]:
+                            temp_files = [mid_file, side_file, mid_output, side_output]
+                            for temp_file in temp_files:
                                 try:
                                     if os.path.exists(temp_file):
                                         os.remove(temp_file)
@@ -354,29 +399,42 @@ def run_command_and_process_files(model_type, config_path, start_check_point, IN
 
                             enhanced_files.append(enhanced_output)
                         else:
-                            # Normal Apollo işlemi
                             command = [
                                 "python", apollo_script,
                                 "--in_wav", output_file,
                                 "--out_wav", enhanced_output,
-                                "--chunk_size", str(chunk_size),
-                                "--overlap", str(overlap),
+                                "--chunk_size", str(int(chunk_size)),
+                                "--overlap", str(int(overlap)),
                                 "--ckpt", ckpt,
                                 "--config", config
                             ]
+                            print(f"Running Apollo Normal command: {' '.join(command)}")
                             apollo_process = subprocess.Popen(
                                 command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True
                             )
+                            stdout_output = ""
                             for line in apollo_process.stdout:
                                 print(f"Apollo Enhancing {original_file_name}: {line.strip()}")
+                                stdout_output += line
                             apollo_process.wait()
 
                             if apollo_process.returncode != 0:
-                                print(f"Apollo failed for {output_file}: {apollo_process.stdout.read()}")
+                                print(f"Apollo failed for {output_file}: {stdout_output}")
+                                enhanced_files.append(output_file)
+                                continue
+
+                            if not os.path.exists(enhanced_output):
+                                print(f"Apollo output missing: {enhanced_output}")
                                 enhanced_files.append(output_file)
                                 continue
 
                             enhanced_files.append(enhanced_output)
+
+                        # Update progress after processing each file
+                        current_progress = 80 + ((idx + 1) * progress_per_file)
+                        current_progress = clamp_percentage(current_progress)
+                        progress(current_progress, desc=f"Enhancing with Apollo... ({idx+1}/{total_files})")
+
                     except Exception as e:
                         print(f"Error during Apollo processing for {output_file}: {str(e)}")
                         enhanced_files.append(output_file)
@@ -384,8 +442,12 @@ def run_command_and_process_files(model_type, config_path, start_check_point, IN
                 else:
                     enhanced_files.append(output_file)
 
+            # Final progress update
+            progress(100, desc=i18n("apollo_enhancement_complete"))
             return tuple(enhanced_files)
 
+        # If use_apollo is False, return the normalized outputs without Apollo processing
+        progress(100, desc=i18n("separation_complete"))
         return tuple(normalized_outputs)
 
     except Exception as e:
@@ -393,53 +455,60 @@ def run_command_and_process_files(model_type, config_path, start_check_point, IN
         return (None,) * 14
 
     finally:
-        progress(100, desc=i18n("separation_process_completed"))
+        try:
+            progress(100, desc=i18n("separation_process_completed"))
+        except:
+            pass
 
-def process_audio(input_audio_file, model, chunk_size, overlap, export_format, use_tta, demud_phaseremix_inst, extract_instrumental, clean_model, use_apollo, apollo_chunk_size, apollo_overlap, apollo_method, apollo_normal_model, apollo_midside_model, progress=gr.Progress(track_tqdm=True), *args, **kwargs):
+def process_audio(input_audio_file, model, chunk_size, overlap, export_format, use_tta, demud_phaseremix_inst, extract_instrumental, use_apollo, apollo_chunk_size, apollo_overlap, apollo_method, apollo_normal_model, apollo_midside_model, progress=gr.Progress(track_tqdm=True), *args, **kwargs):
     try:
         if input_audio_file is not None:
             audio_path = input_audio_file.name
         else:
-            existing_files = os.listdir(INPUT_DIR)
-            if existing_files:
-                audio_path = os.path.join(INPUT_DIR, existing_files[0])
-            else:
-                yield (
-                    None, None, None, None, None, None, None, None, None, None, None, None, None, None,
-                    i18n("no_audio_file_error"),
-                    """
-                    <div id="custom-progress" style="margin-top: 10px;">
-                        <div style="font-size: 1rem; color: #C0C0C0; margin-bottom: 5px;" id="progress-label">{}</div>
-                        <div style="width: 100%; background-color: #444; border-radius: 5px; overflow: hidden;">
-                            <div id="progress-bar" style="width: 0%; height: 20px; background-color: #6e8efb; transition: width 0.3s;"></div>
-                        </div>
-                    </div>
-                    """.format(i18n("no_input_progress_label"))
-                )
-                return
+            return (
+                None, None, None, None, None, None, None, None, None, None, None, None, None, None,
+                i18n("no_audio_file_error"),
+                update_progress_html(i18n("no_input_progress_label"), 0)
+            )
 
         os.makedirs(OUTPUT_DIR, exist_ok=True)
         os.makedirs(OLD_OUTPUT_DIR, exist_ok=True)
         move_old_files(OUTPUT_DIR)
 
-        clean_model_name_full = extract_model_name(model)
-        print(i18n("processing_audio_print").format(audio_path, clean_model_name_full))
+        print(f"process_audio: model parameter received: {model}")
+        clean_model_name_full = extract_model_name_from_checkpoint(model)
+        print(f"Processing audio from: {audio_path} using model: {clean_model_name_full}")
 
-        progress_html = """
-        <div id="custom-progress" style="margin-top: 10px;">
-            <div style="font-size: 1rem; color: #C0C0C0; margin-bottom: 5px;" id="progress-label">{}</div>
-            <div style="width: 100%; background-color: #444; border-radius: 5px; overflow: hidden;">
-                <div id="progress-bar" style="width: 0%; height: 20px; background-color: #6e8efb; transition: width 0.3s;"></div>
-            </div>
-        </div>
-        """.format(i18n("starting_audio_separation_progress_label"))
-        yield (
-            None, None, None, None, None, None, None, None, None, None, None, None, None, None,
-            i18n("starting_audio_separation"),
-            progress_html
-        )
+        print(f"Raw UI inputs - apollo_chunk_size: {apollo_chunk_size}, apollo_overlap: {apollo_overlap}, apollo_method: {apollo_method}")
+
+        try:
+            apollo_chunk_size = int(apollo_chunk_size)
+        except (TypeError, ValueError):
+            print(f"Invalid apollo_chunk_size: {apollo_chunk_size}. Defaulting to 19.")
+            apollo_chunk_size = 19
+
+        try:
+            apollo_overlap = int(apollo_overlap)
+        except (TypeError, ValueError):
+            print(f"Invalid apollo_overlap: {apollo_overlap}. Defaulting to 2.")
+            apollo_overlap = 2
+
+        # Map apollo_method to backend values
+        if apollo_method in [i18n("mid_side_method"), "2", 2, "mid_side_method"]:
+            apollo_method = "mid_side_method"
+        elif apollo_method in [i18n("normal_method"), "1", 1, "normal_method"]:
+            apollo_method = "normal_method"
+        else:
+            print(f"Invalid apollo_method: {apollo_method}. Defaulting to normal_method.")
+            apollo_method = "normal_method"
+        print(f"Interpreted apollo_method: {apollo_method}")
+
+        corrected_chunk_size = apollo_chunk_size
+        corrected_overlap = apollo_overlap
+        print(f"Corrected values - chunk_size: {corrected_chunk_size}, overlap: {corrected_overlap}")
 
         model_type, config_path, start_check_point = get_model_config(clean_model_name_full, chunk_size, overlap)
+        print(f"Model configuration: model_type={model_type}, config_path={config_path}, start_check_point={start_check_point}")
 
         outputs = run_command_and_process_files(
             model_type=model_type,
@@ -450,69 +519,34 @@ def process_audio(input_audio_file, model, chunk_size, overlap, export_format, u
             extract_instrumental=extract_instrumental,
             use_tta=use_tta,
             demud_phaseremix_inst=demud_phaseremix_inst,
-            clean_model=clean_model_name_full,
             progress=progress,
             use_apollo=use_apollo,
             apollo_normal_model=apollo_normal_model,
-            chunk_size=apollo_chunk_size,
-            overlap=apollo_overlap,
+            chunk_size=corrected_chunk_size,
+            overlap=corrected_overlap,
             apollo_method=apollo_method,
             apollo_midside_model=apollo_midside_model,
-            output_format=export_format.split()[0].lower()  # 'wav FLOAT' -> 'wav'
+            output_format=export_format.split()[0].lower()
         )
 
-        # Çıktıların geçerliliğini kontrol et
         if outputs is None or all(output is None for output in outputs):
             raise ValueError("run_command_and_process_files returned None or all None outputs")
 
-        for i in range(10, 91, 10):
-            progress_html = """
-            <div id="custom-progress" style="margin-top: 10px;">
-                <div style="font-size: 1rem; color: #C0C0C0; margin-bottom: 5px;" id="progress-label">{}</div>
-                <div style="width: 100%; background-color: #444; border-radius: 5px; overflow: hidden;">
-                    <div id="progress-bar" style="width: {}%; height: 20px; background-color: #6e8efb; transition: width 0.3s;"></div>
-                </div>
-            </div>
-            """.format(i18n("separating_audio_progress_label").format(i), i)
-            yield (
-                None, None, None, None, None, None, None, None, None, None, None, None, None, None,
-                i18n("separating_audio").format(i),
-                progress_html
-            )
-            time.sleep(0.1)
-
-        progress_html = """
-        <div id="custom-progress" style="margin-top: 10px;">
-            <div style="font-size: 1rem; color: #C0C0C0; margin-bottom: 5px;" id="progress-label">{}</div>
-            <div style="width: 100%; background-color: #444; border-radius: 5px; overflow: hidden;">
-                <div id="progress-bar" style="width: 100%; height: 20px; background-color: #6e8efb; transition: width 0.3s;"></div>
-            </div>
-        </div>
-        """.format(i18n("audio_processing_completed_progress_label"))
-        yield (
+        return (
             outputs[0], outputs[1], outputs[2], outputs[3], outputs[4], outputs[5], outputs[6],
             outputs[7], outputs[8], outputs[9], outputs[10], outputs[11], outputs[12], outputs[13],
             i18n("audio_processing_completed"),
-            progress_html
+            update_progress_html(i18n("audio_processing_completed_progress_label"), 100)
         )
 
     except Exception as e:
-        # Hata mesajını daha ayrıntılı logla
         print(f"Error in process_audio: {str(e)}")
         import traceback
         traceback.print_exc()
-        progress_html = """
-        <div id="custom-progress" style="margin-top: 10px;">
-            <div style="font-size: 1rem; color: #C0C0C0; margin-bottom: 5px;" id="progress-label">{}</div>
-            <div style="width: 100%; background-color: #444; border-radius: 5px; overflow: hidden;">
-                <div id="progress-bar" style="width: 0%; height: 20px; background-color: #6e8efb; transition: width 0.3s;"></div>
-            </div>
-        </div>
-        """.format(i18n("error_occurred_progress_label"))
-        yield (
+        return (
             None, None, None, None, None, None, None, None, None, None, None, None, None, None,
-            i18n("error").format(str(e)),
-            progress_html
+            i18n("error_occurred").format(str(e)),
+            update_progress_html(i18n("error_occurred_progress_label"), 0)
         )
 
 def ensemble_audio_fn(files, method, weights, progress=gr.Progress()):
@@ -548,12 +582,14 @@ def ensemble_audio_fn(files, method, weights, progress=gr.Progress()):
         )
         
         start_time = time.time()
-        total_estimated_time = 10.0
-        for i in np.arange(0.1, 100.1, 0.1):
+        total_estimated_time = 10.0  # Adjust based on actual ensemble time
+        elapsed_time = 0
+        while elapsed_time < total_estimated_time:
             elapsed_time = time.time() - start_time
-            progress_value = min(i, (elapsed_time / total_estimated_time) * 100)
-            time.sleep(0.001)
+            progress_value = (elapsed_time / total_estimated_time) * 100
+            progress_value = clamp_percentage(progress_value)
             progress(progress_value, desc=i18n("ensembling_progress").format(progress_value))
+            time.sleep(0.1)
         
         progress(100, desc=i18n("finalizing_ensemble_output"))
         log = i18n("success_log").format(result.stdout) if not result.stderr else i18n("error_log").format(result.stderr)
@@ -578,24 +614,37 @@ def auto_ensemble_process(
     auto_apollo_normal_model="Apollo Universal Model",
     auto_apollo_chunk_size=19,
     auto_apollo_overlap=2,
-    auto_apollo_method="Normal Method",
-    auto_apollo_midside_model=None,
+    auto_apollo_method="normal_method",
     progress=gr.Progress(track_tqdm=True),
     *args,
     **kwargs
 ):
-    """Birden fazla modelle sesi işler, Apollo ile kalite artırır ve ensemble işlemini gerçekleştirir."""
     try:
         if not selected_models or len(selected_models) < 1:
-            return None, i18n("no_models_selected"), "<div></div>"
+            yield None, i18n("no_models_selected"), update_progress_html(i18n("error_occurred_progress_label"), 0)
 
         if auto_input_audio_file is None:
             existing_files = os.listdir(INPUT_DIR)
             if not existing_files:
-                return None, i18n("no_input_audio_provided"), "<div></div>"
+                yield None, i18n("no_input_audio_provided"), update_progress_html(i18n("error_occurred_progress_label"), 0)
             audio_path = os.path.join(INPUT_DIR, existing_files[0])
         else:
             audio_path = auto_input_audio_file.name if hasattr(auto_input_audio_file, 'name') else auto_input_audio_file
+
+        # Debug log for raw UI inputs
+        print(f"Raw UI inputs - auto_apollo_chunk_size: {auto_apollo_chunk_size}, auto_apollo_overlap: {auto_apollo_overlap}")
+
+        # Map auto_apollo_method to the correct string if it's a numeric value
+        if auto_apollo_method == "2" or auto_apollo_method == 2:
+            auto_apollo_method = "mid_side_method"
+        elif auto_apollo_method == "1" or auto_apollo_method == 1:
+            auto_apollo_method = "normal_method"
+        print(f"Interpreted auto_apollo_method: {auto_apollo_method}")
+
+        # Ensure correct mapping of chunk_size and overlap
+        corrected_auto_chunk_size = int(auto_apollo_chunk_size)
+        corrected_auto_overlap = int(auto_apollo_overlap)
+        print(f"Corrected values - auto_apollo_chunk_size: {corrected_auto_chunk_size}, auto_apollo_overlap: {corrected_auto_overlap}")
 
         auto_ensemble_temp = os.path.join(BASE_DIR, "auto_ensemble_temp")
         os.makedirs(auto_ensemble_temp, exist_ok=True)
@@ -605,24 +654,21 @@ def auto_ensemble_process(
 
         all_outputs = []
         total_models = len(selected_models)
-        model_progress_per_step = 60 / total_models
+        # Allocate 60% of progress for model processing
+        model_progress_range = 60  # 0-60%
+        model_progress_per_step = model_progress_range / total_models if total_models > 0 else 0
 
-        # 1. Adım: Her modelle ses ayrımı yap
         for i, model in enumerate(selected_models):
-            clean_model = extract_model_name(model)
+            clean_model = extract_model_name_from_checkpoint(model)
             model_output_dir = os.path.join(auto_ensemble_temp, clean_model)
             os.makedirs(model_output_dir, exist_ok=True)
 
             current_progress = i * model_progress_per_step
-            progress_html = """
-            <div id="custom-progress" style="margin-top: 10px;">
-                <div style="font-size: 1rem; color: #C0C0C0; margin-bottom: 5px;" id="progress-label">{}</div>
-                <div style="width: 100%; background-color: #444; border-radius: 5px; overflow: hidden;">
-                    <div id="progress-bar" style="width: {}%; height: 20px; background-color: #6e8efb; transition: width 0.3s;"></div>
-                </div>
-            </div>
-            """.format(i18n("loading_model_progress_label").format(i+1, total_models, clean_model, current_progress), current_progress)
-            yield None, i18n("loading_model").format(i+1, total_models, clean_model), progress_html
+            current_progress = clamp_percentage(current_progress)
+            yield None, i18n("loading_model").format(i+1, total_models, clean_model), update_progress_html(
+                i18n("loading_model_progress_label").format(i+1, total_models, clean_model, current_progress),
+                current_progress
+            )
 
             model_type, config_path, start_check_point = get_model_config(clean_model, auto_chunk_size, auto_overlap)
 
@@ -640,49 +686,78 @@ def auto_ensemble_process(
                 cmd.append("--extract_instrumental")
 
             print(i18n("running_command").format(' '.join(cmd)))
-            result = subprocess.run(cmd, capture_output=True, text=True)
-            print(result.stdout)
-            if result.returncode != 0:
-                print(i18n("error").format(result.stderr))
-                return None, i18n("model_failed").format(model, result.stderr), "<div></div>"
+            process = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                bufsize=1,
+                universal_newlines=True
+            )
+
+            stderr_output = ""
+            for line in process.stdout:
+                print(line.strip())
+                if "Progress:" in line:
+                    try:
+                        percentage = float(re.search(r"Progress: (\d+\.\d+)%", line).group(1))
+                        # Scale the percentage within the current model's progress range
+                        model_percentage = (percentage / 100) * model_progress_per_step
+                        current_progress = (i * model_progress_per_step) + model_percentage
+                        current_progress = clamp_percentage(current_progress)
+                        yield None, i18n("loading_model").format(i+1, total_models, clean_model), update_progress_html(
+                            i18n("loading_model_progress_label").format(i+1, total_models, clean_model, current_progress),
+                            current_progress
+                        )
+                    except (AttributeError, ValueError) as e:
+                        print(i18n("progress_parsing_error").format(e))
+
+            for line in process.stderr:
+                stderr_output += line
+                print(line.strip())
+
+            process.wait()
+            if process.returncode != 0:
+                print(i18n("error").format(stderr_output))
+                yield None, i18n("model_failed").format(model, stderr_output), update_progress_html(
+                    i18n("error_occurred_progress_label"), 0
+                )
+                return
 
             gc.collect()
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
 
             current_progress = (i + 1) * model_progress_per_step
-            progress_html = """
-            <div id="custom-progress" style="margin-top: 10px;">
-                <div style="font-size: 1rem; color: #C0C0C0; margin-bottom: 5px;" id="progress-label">{}</div>
-                <div style="width: 100%; background-color: #444; border-radius: 5px; overflow: hidden;">
-                    <div id="progress-bar" style="width: {}%; height: 20px; background-color: #6e8efb; transition: width 0.3s;"></div>
-                </div>
-            </div>
-            """.format(i18n("completed_model_progress_label").format(i+1, total_models, clean_model, current_progress), current_progress)
-            yield None, i18n("completed_model").format(i+1, total_models, clean_model), progress_html
+            current_progress = clamp_percentage(current_progress)
+            yield None, i18n("completed_model").format(i+1, total_models, clean_model), update_progress_html(
+                i18n("completed_model_progress_label").format(i+1, total_models, clean_model, current_progress),
+                current_progress
+            )
 
             model_outputs = glob.glob(os.path.join(model_output_dir, "*.wav"))
             if not model_outputs:
                 raise FileNotFoundError(i18n("model_output_failed").format(model))
             all_outputs.extend(model_outputs)
 
-        # 2. Adım: Apollo ile kalite artırma
         enhanced_outputs = []
         if auto_use_apollo:
             apollo_script = "/content/Apollo/inference.py"
-            print(f"Apollo parameters - chunk_size: {auto_apollo_chunk_size}, overlap: {auto_apollo_overlap}, method: {auto_apollo_method}, normal_model: {auto_apollo_normal_model}")
-            progress_html = """
-            <div id="custom-progress" style="margin-top: 10px;">
-                <div style="font-size: 1rem; color: #C0C0C0; margin-bottom: 5px;" id="progress-label">{}</div>
-                <div style="width: 100%; background-color: #444; border-radius: 5px; overflow: hidden;">
-                    <div id="progress-bar" style="width: 60%; height: 20px; background-color: #6e8efb; transition: width 0.3s;"></div>
-                </div>
-            </div>
-            """.format(i18n("starting_apollo_enhancement_progress_label"))
-            yield None, i18n("starting_apollo_enhancement"), progress_html
+            print(f"Apollo parameters - chunk_size: {corrected_auto_chunk_size}, overlap: {corrected_auto_overlap}, method: {auto_apollo_method}, normal_model: {auto_apollo_normal_model}")
 
-            # Apollo model seçimleri
-            if auto_apollo_method == i18n("normal_method"):
+            # Allocate 30% for Apollo enhancement (60-90%)
+            apollo_progress_range = 30  # 60-90%
+            total_outputs = len(all_outputs)
+            apollo_progress_per_file = apollo_progress_range / total_outputs if total_outputs > 0 else 0
+
+            yield None, i18n("auto_enhancing_with_apollo").format(0, total_outputs), update_progress_html(
+                i18n("waiting_for_files_progress_label"), 60
+            )
+
+            if auto_apollo_method == "mid_side_method":
+                ckpt = "/content/Apollo/model/apollo_universal_model.ckpt"
+                config = "/content/Apollo/configs/config_apollo.yaml"
+            else:
                 if auto_apollo_normal_model == "MP3 Enhancer":
                     ckpt = "/content/Apollo/model/pytorch_model.bin"
                     config = "/content/Apollo/configs/apollo.yaml"
@@ -692,63 +767,40 @@ def auto_ensemble_process(
                 elif auto_apollo_normal_model == "Lew Vocal Enhancer v2 (beta)":
                     ckpt = "/content/Apollo/model/apollo_model_v2.ckpt"
                     config = "/content/Apollo/configs/config_apollo_vocal.yaml"
-                else:  # Apollo Universal Model
-                    ckpt = "/content/Apollo/model/apollo_universal_model.ckpt"
-                    config = "/content/Apollo/configs/config_apollo.yaml"
-            else:  # Mid/Side method
-                if auto_apollo_normal_model == "MP3 Enhancer":
-                    ckpt = "/content/Apollo/model/pytorch_model.bin"
-                    config = "/content/Apollo/configs/apollo.yaml"
-                elif auto_apollo_normal_model == "Lew Vocal Enhancer":
-                    ckpt = "/content/Apollo/model/apollo_model.ckpt"
-                    config = "/content/Apollo/configs/apollo.yaml"
-                elif auto_apollo_normal_model == "Lew Vocal Enhancer v2 (beta)":
-                    ckpt = "/content/Apollo/model/apollo_model_v2.ckpt"
-                    config = "/content/Apollo/configs/config_apollo_vocal.yaml"
-                else:  # Apollo Universal Model
+                else:
                     ckpt = "/content/Apollo/model/apollo_universal_model.ckpt"
                     config = "/content/Apollo/configs/config_apollo.yaml"
 
-            # Model dosyalarını kontrol et
             if not os.path.exists(ckpt):
                 raise FileNotFoundError(f"Apollo checkpoint file not found: {ckpt}")
             if not os.path.exists(config):
                 raise FileNotFoundError(f"Apollo config file not found: {config}")
 
-            total_outputs = len(all_outputs)
-            apollo_progress_per_file = 30 / total_outputs
-
             for idx, output_file in enumerate(all_outputs):
-                original_file_name = os.path.splitext(os.path.basename(output_file))[0]
-                enhanced_output = os.path.join(auto_ensemble_temp, f"{original_file_name}_enhanced.wav")
+                original_file_name = sanitize_filename(os.path.splitext(os.path.basename(output_file))[0])
+                enhancement_suffix = "_OrtaYanYükseltilmiş" if auto_apollo_method == "mid_side_method" else "_Yükseltilmiş"
+                enhanced_output = os.path.join(auto_ensemble_temp, f"{original_file_name}{enhancement_suffix}.wav")
 
                 current_progress = 60 + (idx * apollo_progress_per_file)
-                progress_html = """
-                <div id="custom-progress" style="margin-top: 10px;">
-                    <div style="font-size: 1rem; color: #C0C0C0; margin-bottom: 5px;" id="progress-label">{}</div>
-                    <div style="width: 100%; background-color: #444; border-radius: 5px; overflow: hidden;">
-                        <div id="progress-bar" style="width: {}%; height: 20px; background-color: #6e8efb; transition: width 0.3s;"></div>
-                    </div>
-                </div>
-                """.format(i18n("enhancing_with_apollo_progress_label").format(idx+1, total_outputs, original_file_name), current_progress)
-                yield None, i18n("enhancing_with_apollo").format(idx+1, total_outputs, original_file_name), progress_html
+                current_progress = clamp_percentage(current_progress)
+                yield None, i18n("auto_enhancing_with_apollo").format(idx+1, total_outputs), update_progress_html(
+                    i18n("enhancing_with_apollo").format(idx+1, total_outputs, original_file_name),
+                    current_progress
+                )
 
-                MID_SIDE_METHOD = i18n("mid_side_method")
-                if auto_apollo_method == MID_SIDE_METHOD and auto_apollo_midside_model:
-                    # Mid/Side işleme
+                if auto_apollo_method == "mid_side_method":
                     audio, sr = librosa.load(output_file, mono=False, sr=None)
-                    if audio.ndim == 1:  # Mono ise stereo yap
+                    if audio.ndim == 1:
                         audio = np.array([audio, audio])
 
-                    mid = (audio[0] + audio[1]) * 0.5  # Merkez kanal
-                    side = (audio[0] - audio[1]) * 0.5  # Yan kanal
+                    mid = (audio[0] + audio[1]) * 0.5
+                    side = (audio[0] - audio[1]) * 0.5
 
-                    mid_file = os.path.join(auto_ensemble_temp, "mid_temp.wav")
-                    side_file = os.path.join(auto_ensemble_temp, "side_temp.wav")
+                    mid_file = os.path.join(auto_ensemble_temp, f"{original_file_name}_mid_temp.wav")
+                    side_file = os.path.join(auto_ensemble_temp, f"{original_file_name}_side_temp.wav")
                     sf.write(mid_file, mid, sr)
                     sf.write(side_file, side, sr)
 
-                    # Mid için Apollo
                     mid_output = os.path.join(auto_ensemble_temp, f"{original_file_name}_mid_enhanced.wav")
                     command_mid = [
                         "python", apollo_script,
@@ -756,53 +808,33 @@ def auto_ensemble_process(
                         "--out_wav", mid_output,
                         "--ckpt", ckpt,
                         "--config", config,
-                        "--chunk_size", str(auto_apollo_chunk_size),
-                        "--overlap", str(auto_apollo_overlap)
+                        "--chunk_size", str(corrected_auto_chunk_size),
+                        "--overlap", str(corrected_auto_overlap)
                     ]
-                    print(f"Running Mid Apollo command: {' '.join(command_mid)}")
+                    print(f"Running Mid Apollo command with chunk_size={corrected_auto_chunk_size}, overlap={corrected_auto_overlap}: {' '.join(command_mid)}")
                     result_mid = subprocess.run(command_mid, capture_output=True, text=True)
                     if result_mid.returncode != 0:
                         print(f"Apollo Mid processing failed: {result_mid.stderr}")
                         enhanced_outputs.append(output_file)
                         continue
 
-                    # Side için Apollo
                     side_output = os.path.join(auto_ensemble_temp, f"{original_file_name}_side_enhanced.wav")
-                    if auto_apollo_midside_model == "MP3 Enhancer":
-                        side_ckpt = "/content/Apollo/model/pytorch_model.bin"
-                        side_config = "/content/Apollo/configs/apollo.yaml"
-                    elif auto_apollo_midside_model == "Lew Vocal Enhancer":
-                        side_ckpt = "/content/Apollo/model/apollo_model.ckpt"
-                        side_config = "/content/Apollo/configs/apollo.yaml"
-                    elif auto_apollo_midside_model == "Lew Vocal Enhancer v2 (beta)":
-                        side_ckpt = "/content/Apollo/model/apollo_model_v2.ckpt"
-                        side_config = "/content/Apollo/configs/config_apollo_vocal.yaml"
-                    else:
-                        side_ckpt = "/content/Apollo/model/apollo_universal_model.ckpt"
-                        side_config = "/content/Apollo/configs/config_apollo.yaml"
-
-                    if not os.path.exists(side_ckpt) or not os.path.exists(side_config):
-                        print(f"Apollo Side model files missing: {side_ckpt}, {side_config}")
-                        enhanced_outputs.append(output_file)
-                        continue
-
                     command_side = [
                         "python", apollo_script,
                         "--in_wav", side_file,
                         "--out_wav", side_output,
-                        "--ckpt", side_ckpt,
-                        "--config", side_config,
-                        "--chunk_size", str(auto_apollo_chunk_size),
-                        "--overlap", str(auto_apollo_overlap)
+                        "--ckpt", ckpt,
+                        "--config", config,
+                        "--chunk_size", str(corrected_auto_chunk_size),
+                        "--overlap", str(corrected_auto_overlap)
                     ]
-                    print(f"Running Side Apollo command: {' '.join(command_side)}")
+                    print(f"Running Side Apollo command with chunk_size={corrected_auto_chunk_size}, overlap={corrected_auto_overlap}: {' '.join(command_side)}")
                     result_side = subprocess.run(command_side, capture_output=True, text=True)
                     if result_side.returncode != 0:
                         print(f"Apollo Side processing failed: {result_side.stderr}")
                         enhanced_outputs.append(output_file)
                         continue
 
-                    # Mid ve Side’ı birleştir
                     mid_audio, _ = librosa.load(mid_output, sr=sr, mono=True)
                     side_audio, _ = librosa.load(side_output, sr=sr, mono=True)
                     left = mid_audio + side_audio
@@ -810,24 +842,22 @@ def auto_ensemble_process(
                     combined = np.array([left, right])
                     sf.write(enhanced_output, combined.T, sr)
 
-                    # Geçici dosyaları temizle
                     for temp_file in [mid_file, side_file, mid_output, side_output]:
                         if os.path.exists(temp_file):
                             os.remove(temp_file)
 
                     enhanced_outputs.append(enhanced_output)
                 else:
-                    # Normal Apollo işlemi
                     command = [
                         "python", apollo_script,
                         "--in_wav", output_file,
                         "--out_wav", enhanced_output,
                         "--ckpt", ckpt,
                         "--config", config,
-                        "--chunk_size", str(auto_apollo_chunk_size),
-                        "--overlap", str(auto_apollo_overlap)
+                        "--chunk_size", str(corrected_auto_chunk_size),
+                        "--overlap", str(corrected_auto_overlap)
                     ]
-                    print(f"Running Normal Apollo command: {' '.join(command)}")
+                    print(f"Running Normal Apollo command with chunk_size={corrected_auto_chunk_size}, overlap={corrected_auto_overlap}: {' '.join(command)}")
                     apollo_process = subprocess.Popen(
                         command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True
                     )
@@ -844,18 +874,20 @@ def auto_ensemble_process(
 
                     enhanced_outputs.append(enhanced_output)
 
-            all_outputs = enhanced_outputs  # Apollo sonrası çıktıları ensemble’a gönder
+                current_progress = 60 + ((idx + 1) * apollo_progress_per_file)
+                current_progress = clamp_percentage(current_progress)
+                yield None, i18n("auto_enhancing_with_apollo").format(idx+1, total_outputs), update_progress_html(
+                    i18n("enhancing_with_apollo").format(idx+1, total_outputs, original_file_name),
+                    current_progress
+                )
 
-        # 3. Adım: Ensemble işlemi
-        progress_html = """
-        <div id="custom-progress" style="margin-top: 10px;">
-            <div style="font-size: 1rem; color: #C0C0C0; margin-bottom: 5px;" id="progress-label">{}</div>
-            <div style="width: 100%; background-color: #444; border-radius: 5px; overflow: hidden;">
-                <div id="progress-bar" style="width: 90%; height: 20px; background-color: #6e8efb; transition: width 0.3s;"></div>
-            </div>
-        </div>
-        """.format(i18n("performing_ensemble_progress_label"))
-        yield None, i18n("performing_ensemble"), progress_html
+            all_outputs = enhanced_outputs
+
+        # Allocate 10% for ensemble (90-100%)
+        ensemble_progress_range = 10  # 90-100%
+        yield None, i18n("performing_ensemble"), update_progress_html(
+            i18n("performing_ensemble_progress_label"), 90
+        )
 
         quoted_files = [f'"{f}"' for f in all_outputs]
         timestamp = str(int(time.time()))
@@ -870,51 +902,67 @@ def auto_ensemble_process(
 
         print(i18n("memory_usage_before_ensemble").format(psutil.virtual_memory().percent))
         print(f"Running Ensemble command: {' '.join(ensemble_cmd)}")
-        result = subprocess.run(
+        process = subprocess.Popen(
             " ".join(ensemble_cmd),
             shell=True,
-            capture_output=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             text=True,
-            check=True
+            bufsize=1,
+            universal_newlines=True
         )
+
+        start_time = time.time()
+        total_estimated_time = 10.0  # Adjust based on actual ensemble time
+        elapsed_time = 0
+        while elapsed_time < total_estimated_time:
+            elapsed_time = time.time() - start_time
+            # Scale progress within 90-98%
+            progress_value = 90 + ((elapsed_time / total_estimated_time) * 8)
+            progress_value = clamp_percentage(progress_value)
+            yield None, i18n("performing_ensemble"), update_progress_html(
+                i18n("ensembling_progress").format(progress_value),
+                progress_value
+            )
+            time.sleep(0.1)
+
+        stdout_output = ""
+        stderr_output = ""
+        for line in process.stdout:
+            stdout_output += line
+            print(line.strip())
+        for line in process.stderr:
+            stderr_output += line
+            print(line.strip())
+
+        process.wait()
+        if process.returncode != 0:
+            print(i18n("error").format(stderr_output))
+            yield None, i18n("error").format(stderr_output), update_progress_html(
+                i18n("error_occurred_progress_label"), 0
+            )
+            return
+
         print(i18n("memory_usage_after_ensemble").format(psutil.virtual_memory().percent))
 
-        progress_html = """
-        <div id="custom-progress" style="margin-top: 10px;">
-            <div style="font-size: 1rem; color: #C0C0C0; margin-bottom: 5px;" id="progress-label">{}</div>
-            <div style="width: 100%; background-color: #444; border-radius: 5px; overflow: hidden;">
-                <div id="progress-bar" style="width: 98%; height: 20px; background-color: #6e8efb; transition: width 0.3s;"></div>
-            </div>
-        </div>
-        """.format(i18n("finalizing_ensemble_output_progress_label"))
-        yield None, i18n("finalizing_ensemble_output"), progress_html
+        yield None, i18n("finalizing_ensemble_output"), update_progress_html(
+            i18n("finalizing_ensemble_output_progress_label"), 98
+        )
 
         if not os.path.exists(output_path):
             raise RuntimeError(i18n("ensemble_file_creation_failed").format(output_path))
 
-        progress_html = """
-        <div id="custom-progress" style="margin-top: 10px;">
-            <div style="font-size: 1rem; color: #C0C0C0; margin-bottom: 5px;" id="progress-label">{}</div>
-            <div style="width: 100%; background-color: #444; border-radius: 5px; overflow: hidden;">
-                <div id="progress-bar" style="width: 100%; height: 20px; background-color: #6e8efb; transition: width 0.3s;"></div>
-            </div>
-        </div>
-        """.format(i18n("ensemble_completed_progress_label"))
-        yield output_path, i18n("success_output_created"), progress_html
+        yield output_path, i18n("success_output_created"), update_progress_html(
+            i18n("ensemble_completed_progress_label"), 100
+        )
 
     except Exception as e:
         print(f"Error in auto_ensemble_process: {str(e)}")
         import traceback
         traceback.print_exc()
-        progress_html = """
-        <div id="custom-progress" style="margin-top: 10px;">
-            <div style="font-size: 1rem; color: #C0C0C0; margin-bottom: 5px;" id="progress-label">{}</div>
-            <div style="width: 100%; background-color: #444; border-radius: 5px; overflow: hidden;">
-                <div id="progress-bar" style="width: 0%; height: 20px; background-color: #6e8efb; transition: width 0.3s;"></div>
-            </div>
-        </div>
-        """.format(i18n("error_occurred_progress_label"))
-        yield None, i18n("error").format(str(e)), progress_html
+        yield None, i18n("error").format(str(e)), update_progress_html(
+            i18n("error_occurred_progress_label"), 0
+        )
     finally:
         shutil.rmtree(auto_ensemble_temp, ignore_errors=True)
         gc.collect()
