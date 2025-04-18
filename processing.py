@@ -110,15 +110,6 @@ def refresh_auto_output():
     except Exception as e:
         return None, i18n("error_refreshing_output").format(str(e))
 
-def sanitize_filename(filename):
-    base, ext = os.path.splitext(filename)
-    base = re.sub(r'\.+', '_', base)
-    base = re.sub(r'[#<>:"/\\|?*]', '_', base)
-    base = re.sub(r'\s+', '_', base)
-    base = re.sub(r'_+', '_', base)
-    base = base.strip('_')
-    return f"{base}{ext}"
-
 def clamp_percentage(value):
     """Helper function to clamp percentage values to the 0-100 range."""
     try:
@@ -149,9 +140,52 @@ def extract_model_name_from_checkpoint(checkpoint_path):
     print(f"Original checkpoint path: {checkpoint_path}, extracted model_name: {model_name}")
     return model_name.strip()
 
-def run_command_and_process_files(model_type, config_path, start_check_point, INPUT_DIR, OUTPUT_DIR, extract_instrumental, use_tta, demud_phaseremix_inst, progress=gr.Progress(), use_apollo=True, apollo_normal_model="Apollo Universal Model", chunk_size=19, overlap=2, apollo_method="normal_method", apollo_midside_model=None, output_format="wav"):
+def run_command_and_process_files(
+    model_type,
+    config_path,
+    start_check_point,
+    INPUT_DIR,
+    OUTPUT_DIR,
+    extract_instrumental,
+    use_tta,
+    demud_phaseremix_inst,
+    progress=None,
+    use_apollo=True,
+    apollo_normal_model="Apollo Universal Model",
+    inference_chunk_size=352800,
+    inference_overlap=2,
+    apollo_chunk_size=19,
+    apollo_overlap=2,
+    apollo_method="normal_method",
+    apollo_midside_model=None,
+    output_format="wav"
+):
+    """
+    Run inference.py with specified parameters and process output files.
+    Args:
+        model_type (str): Type of model (e.g., 'mel_band_roformer').
+        config_path (str): Path to model config file.
+        start_check_point (str): Path to model checkpoint.
+        INPUT_DIR (str): Input folder path.
+        OUTPUT_DIR (str): Output folder path.
+        extract_instrumental (bool): Whether to extract instrumental.
+        use_tta (bool): Whether to use test-time augmentation.
+        demud_phaseremix_inst (bool): Whether to use demud phaseremix.
+        progress: Gradio progress object or None.
+        use_apollo (bool): Whether to use Apollo enhancement.
+        apollo_normal_model (str): Apollo model for normal method.
+        inference_chunk_size (int): Chunk size for inference.py (logged, not passed to command).
+        inference_overlap (int): Overlap percentage for inference.py (logged, not passed to command).
+        apollo_chunk_size (int): Chunk size for Apollo processing.
+        apollo_overlap (int): Overlap percentage for Apollo processing.
+        apollo_method (str): Apollo processing method.
+        apollo_midside_model (str): Apollo model for mid-side method.
+        output_format (str): Output audio format.
+    Returns:
+        tuple: Paths to output audio files (vocals, instrumental, etc.) or None.
+    """
     try:
-        print(f"run_command_and_process_files: model_type={model_type}, config_path={config_path}, start_check_point={start_check_point}")
+        print(f"run_command_and_process_files: model_type={model_type}, config_path={config_path}, start_check_point={start_check_point}, inference_chunk_size={inference_chunk_size}, inference_overlap={inference_overlap}, apollo_chunk_size={apollo_chunk_size}, apollo_overlap={apollo_overlap}, progress_type={type(progress)}")
         if not config_path:
             raise ValueError(f"Configuration path is empty for model_type: {model_type}")
         if not os.path.exists(config_path):
@@ -159,13 +193,31 @@ def run_command_and_process_files(model_type, config_path, start_check_point, IN
         if not start_check_point or not os.path.exists(start_check_point):
             raise FileNotFoundError(f"Checkpoint file not found: {start_check_point}")
 
+        # Validate inference parameters (for logging only)
+        try:
+            inference_chunk_size = int(inference_chunk_size)
+            inference_overlap = int(inference_overlap)
+        except (TypeError, ValueError) as e:
+            print(f"Invalid inference_chunk_size or inference_overlap: {e}. Defaulting to inference_chunk_size=352800, inference_overlap=2")
+            inference_chunk_size = 352800
+            inference_overlap = 2
+
+        # Validate Apollo parameters
+        try:
+            apollo_chunk_size = int(apollo_chunk_size)
+            apollo_overlap = int(apollo_overlap)
+        except (TypeError, ValueError) as e:
+            print(f"Invalid apollo_chunk_size or apollo_overlap: {e}. Defaulting to apollo_chunk_size=19, apollo_overlap=2")
+            apollo_chunk_size = 19
+            apollo_overlap = 2
+
         cmd_parts = [
             "python", INFERENCE_PATH,
             "--model_type", model_type,
             "--config_path", config_path,
             "--start_check_point", start_check_point,
             "--input_folder", INPUT_DIR,
-            "--store_dir", OUTPUT_DIR,
+            "--store_dir", OUTPUT_DIR
         ]
         if extract_instrumental:
             cmd_parts.append("--extract_instrumental")
@@ -175,49 +227,30 @@ def run_command_and_process_files(model_type, config_path, start_check_point, IN
             cmd_parts.append("--demud_phaseremix_inst")
 
         print(f"Running command: {' '.join(cmd_parts)}")
-        process = subprocess.Popen(
+        process = subprocess.run(
             cmd_parts,
             cwd=BASE_DIR,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            capture_output=True,
             text=True,
-            bufsize=1,
-            universal_newlines=True
+            check=True
         )
 
-        # Initialize progress for separation phase (0-80%)
-        progress(0, desc=i18n("starting_audio_separation"), total=100)
-        progress_bar = tqdm(total=80, desc=i18n("processing_audio"), unit="%")
-        stderr_output = ""
+        # Log subprocess output
+        print(f"Subprocess stdout: {process.stdout}")
+        if process.stderr:
+            print(f"Subprocess stderr: {process.stderr}")
 
-        for line in process.stdout:
-            print(line.strip())
-            if "Progress:" in line:
-                try:
-                    percentage = float(re.search(r"Progress: (\d+\.\d+)%", line).group(1))
-                    # Scale separation progress to 0-80%
-                    scaled_percentage = clamp_percentage(percentage * 0.8)
-                    progress_label = i18n("separating_audio").format(scaled_percentage)
-                    progress(scaled_percentage, desc=progress_label)
-                    progress_bar.n = scaled_percentage
-                    progress_bar.refresh()
-                except (AttributeError, ValueError) as e:
-                    print(i18n("progress_parsing_error").format(e))
-            elif "Processing file" in line:
-                progress(0, desc=line.strip())
+        # Initialize progress for separation phase (0-80%) if progress is callable
+        if progress is not None and callable(getattr(progress, '__call__', None)):
+            progress(0, desc=i18n("starting_audio_separation"), total=100)
+        else:
+            print("Progress not callable or None, skipping progress update")
 
-        for line in process.stderr:
-            stderr_output += line
-            print(line.strip())
-
-        process.wait()
-        progress_bar.close()
-        progress(80, desc=i18n("separation_complete"))
-
-        if process.returncode != 0:
-            raise RuntimeError(f"inference.py failed: {stderr_output}")
-
+        # Check if output files were generated
         filename_model = extract_model_name_from_checkpoint(start_check_point)
+        output_files = os.listdir(OUTPUT_DIR)
+        if not output_files:
+            raise FileNotFoundError("No output files generated in OUTPUT_DIR")
 
         def rename_files_with_model(folder, filename_model):
             for filename in sorted(os.listdir(folder)):
@@ -243,7 +276,7 @@ def run_command_and_process_files(model_type, config_path, start_check_point, IN
 
         output_files = os.listdir(OUTPUT_DIR)
         if not output_files:
-            raise FileNotFoundError("No output files generated in OUTPUT_DIR")
+            raise FileNotFoundError("No output files generated after renaming")
 
         def find_file(keyword):
             matching_files = [
@@ -278,7 +311,7 @@ def run_command_and_process_files(model_type, config_path, start_check_point, IN
         if use_apollo:
             apollo_script = "/content/Apollo/inference.py"
 
-            print(f"Apollo parameters - chunk_size: {chunk_size}, overlap: {overlap}, method: {apollo_method}, normal_model: {apollo_normal_model}, midside_model: {apollo_midside_model}")
+            print(f"Apollo parameters - chunk_size: {apollo_chunk_size}, overlap: {apollo_overlap}, method: {apollo_method}, normal_model: {apollo_normal_model}, midside_model: {apollo_midside_model}")
 
             if apollo_method == "mid_side_method":
                 if apollo_midside_model == "MP3 Enhancer":
@@ -324,9 +357,12 @@ def run_command_and_process_files(model_type, config_path, start_check_point, IN
 
                     try:
                         # Update progress for Apollo processing
-                        current_progress = 80 + (idx * progress_per_file)
-                        current_progress = clamp_percentage(current_progress)
-                        progress(current_progress, desc=f"Enhancing with Apollo... ({idx+1}/{total_files})")
+                        if progress is not None and callable(getattr(progress, '__call__', None)):
+                            current_progress = 80 + (idx * progress_per_file)
+                            current_progress = clamp_percentage(current_progress)
+                            progress(current_progress, desc=f"Enhancing with Apollo... ({idx+1}/{total_files})")
+                        else:
+                            print(f"Progress not callable or None, skipping Apollo progress update for file {idx+1}/{total_files}")
 
                         if apollo_method == "mid_side_method":
                             audio, sr = librosa.load(output_file, mono=False, sr=None)
@@ -346,8 +382,8 @@ def run_command_and_process_files(model_type, config_path, start_check_point, IN
                                 "python", apollo_script,
                                 "--in_wav", mid_file,
                                 "--out_wav", mid_output,
-                                "--chunk_size", str(int(chunk_size)),
-                                "--overlap", str(int(overlap)),
+                                "--chunk_size", str(int(apollo_chunk_size)),
+                                "--overlap", str(int(apollo_overlap)),
                                 "--ckpt", ckpt,
                                 "--config", config
                             ]
@@ -363,8 +399,8 @@ def run_command_and_process_files(model_type, config_path, start_check_point, IN
                                 "python", apollo_script,
                                 "--in_wav", side_file,
                                 "--out_wav", side_output,
-                                "--chunk_size", str(int(chunk_size)),
-                                "--overlap", str(int(overlap)),
+                                "--chunk_size", str(int(apollo_chunk_size)),
+                                "--overlap", str(int(apollo_overlap)),
                                 "--ckpt", ckpt,
                                 "--config", config
                             ]
@@ -403,23 +439,19 @@ def run_command_and_process_files(model_type, config_path, start_check_point, IN
                                 "python", apollo_script,
                                 "--in_wav", output_file,
                                 "--out_wav", enhanced_output,
-                                "--chunk_size", str(int(chunk_size)),
-                                "--overlap", str(int(overlap)),
+                                "--chunk_size", str(int(apollo_chunk_size)),
+                                "--overlap", str(int(apollo_overlap)),
                                 "--ckpt", ckpt,
                                 "--config", config
                             ]
                             print(f"Running Apollo Normal command: {' '.join(command)}")
-                            apollo_process = subprocess.Popen(
-                                command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True
+                            apollo_process = subprocess.run(
+                                command,
+                                capture_output=True,
+                                text=True
                             )
-                            stdout_output = ""
-                            for line in apollo_process.stdout:
-                                print(f"Apollo Enhancing {original_file_name}: {line.strip()}")
-                                stdout_output += line
-                            apollo_process.wait()
-
                             if apollo_process.returncode != 0:
-                                print(f"Apollo failed for {output_file}: {stdout_output}")
+                                print(f"Apollo failed for {output_file}: {apollo_process.stderr}")
                                 enhanced_files.append(output_file)
                                 continue
 
@@ -431,9 +463,10 @@ def run_command_and_process_files(model_type, config_path, start_check_point, IN
                             enhanced_files.append(enhanced_output)
 
                         # Update progress after processing each file
-                        current_progress = 80 + ((idx + 1) * progress_per_file)
-                        current_progress = clamp_percentage(current_progress)
-                        progress(current_progress, desc=f"Enhancing with Apollo... ({idx+1}/{total_files})")
+                        if progress is not None and callable(getattr(progress, '__call__', None)):
+                            current_progress = 80 + ((idx + 1) * progress_per_file)
+                            current_progress = clamp_percentage(current_progress)
+                            progress(current_progress, desc=f"Enhancing with Apollo... ({idx+1}/{total_files})")
 
                     except Exception as e:
                         print(f"Error during Apollo processing for {output_file}: {str(e)}")
@@ -443,22 +476,23 @@ def run_command_and_process_files(model_type, config_path, start_check_point, IN
                     enhanced_files.append(output_file)
 
             # Final progress update
-            progress(100, desc=i18n("apollo_enhancement_complete"))
+            if progress is not None and callable(getattr(progress, '__call__', None)):
+                progress(100, desc=i18n("apollo_enhancement_complete"))
             return tuple(enhanced_files)
 
         # If use_apollo is False, return the normalized outputs without Apollo processing
-        progress(100, desc=i18n("separation_complete"))
+        if progress is not None and callable(getattr(progress, '__call__', None)):
+            progress(100, desc=i18n("separation_complete"))
         return tuple(normalized_outputs)
 
-    except Exception as e:
-        print(i18n("error_occurred").format(e))
+    except subprocess.CalledProcessError as e:
+        print(f"Subprocess failed with code {e.returncode}: {e.stderr}")
         return (None,) * 14
-
-    finally:
-        try:
-            progress(100, desc=i18n("separation_process_completed"))
-        except:
-            pass
+    except Exception as e:
+        print(f"Error in run_command_and_process_files: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return (None,) * 14
 
 def process_audio(input_audio_file, model, chunk_size, overlap, export_format, use_tta, demud_phaseremix_inst, extract_instrumental, use_apollo, apollo_chunk_size, apollo_overlap, apollo_method, apollo_normal_model, apollo_midside_model, progress=gr.Progress(track_tqdm=True), *args, **kwargs):
     try:
@@ -479,8 +513,22 @@ def process_audio(input_audio_file, model, chunk_size, overlap, export_format, u
         clean_model_name_full = extract_model_name_from_checkpoint(model)
         print(f"Processing audio from: {audio_path} using model: {clean_model_name_full}")
 
-        print(f"Raw UI inputs - apollo_chunk_size: {apollo_chunk_size}, apollo_overlap: {apollo_overlap}, apollo_method: {apollo_method}")
+        print(f"Raw UI inputs - chunk_size: {chunk_size}, overlap: {overlap}, apollo_chunk_size: {apollo_chunk_size}, apollo_overlap: {apollo_overlap}, apollo_method: {apollo_method}")
 
+        # Validate inference parameters (for logging only)
+        try:
+            inference_chunk_size = int(chunk_size)
+        except (TypeError, ValueError):
+            print(f"Invalid chunk_size: {chunk_size}. Defaulting to 352800.")
+            inference_chunk_size = 352800
+
+        try:
+            inference_overlap = int(overlap)
+        except (TypeError, ValueError):
+            print(f"Invalid overlap: {overlap}. Defaulting to 2.")
+            inference_overlap = 2
+
+        # Validate Apollo parameters
         try:
             apollo_chunk_size = int(apollo_chunk_size)
         except (TypeError, ValueError):
@@ -503,9 +551,7 @@ def process_audio(input_audio_file, model, chunk_size, overlap, export_format, u
             apollo_method = "normal_method"
         print(f"Interpreted apollo_method: {apollo_method}")
 
-        corrected_chunk_size = apollo_chunk_size
-        corrected_overlap = apollo_overlap
-        print(f"Corrected values - chunk_size: {corrected_chunk_size}, overlap: {corrected_overlap}")
+        print(f"Corrected values - inference_chunk_size: {inference_chunk_size}, inference_overlap: {inference_overlap}, apollo_chunk_size: {apollo_chunk_size}, apollo_overlap: {apollo_overlap}")
 
         model_type, config_path, start_check_point = get_model_config(clean_model_name_full, chunk_size, overlap)
         print(f"Model configuration: model_type={model_type}, config_path={config_path}, start_check_point={start_check_point}")
@@ -522,8 +568,10 @@ def process_audio(input_audio_file, model, chunk_size, overlap, export_format, u
             progress=progress,
             use_apollo=use_apollo,
             apollo_normal_model=apollo_normal_model,
-            chunk_size=corrected_chunk_size,
-            overlap=corrected_overlap,
+            inference_chunk_size=inference_chunk_size,
+            inference_overlap=inference_overlap,
+            apollo_chunk_size=apollo_chunk_size,
+            apollo_overlap=apollo_overlap,
             apollo_method=apollo_method,
             apollo_midside_model=apollo_midside_model,
             output_format=export_format.split()[0].lower()
@@ -884,7 +932,6 @@ def auto_ensemble_process(
             all_outputs = enhanced_outputs
 
         # Allocate 10% for ensemble (90-100%)
-        ensemble_progress_range = 10  # 90-100%
         yield None, i18n("performing_ensemble"), update_progress_html(
             i18n("performing_ensemble_progress_label"), 90
         )
