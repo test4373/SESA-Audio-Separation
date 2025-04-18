@@ -260,6 +260,13 @@
   "enhancing_with_apollo": "Enhancing with Apollo ({}/{} files)...",
   "apollo_processing_completed": "Apollo processing completed!",
   "apollo_overlap_info": "Overlap for Apollo enhancement (recommended: 2)",
+  "selected_models": "Selected Models",
+  "save_preset": "Save Preset",
+  "delete_preset": "Delete Preset",
+  "refresh_presets": "Refresh Presets",
+  "presets_name": "Preset Name",
+  "select_preset": "Select Preset",
+  "add_favorite": "Add to Favorites",
   "invalid_method": "Error: Invalid method! Use 'gradio', 'localtunnel', or 'ngrok'.",
   "language_changed_message": "Language changed. please restart the cell."
 }
