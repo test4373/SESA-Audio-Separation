@@ -11,10 +11,16 @@ class I18nAuto:
     LANGUAGE_PATH = os.path.join(BASE_DIR, "assets", "i18n", "languages")
 
     def __init__(self, language=None):
-        with open(os.path.join(BASE_DIR, "assets", "config.json"), "r", encoding="utf8") as file:
-            config = json.load(file)
-            override = config["lang"]["override"]
-            lang_prefix = config["lang"]["selected_lang"]
+        config_path = os.path.join(BASE_DIR, "assets", "config.json")
+        try:
+            with open(config_path, "r", encoding="utf8") as file:
+                config = json.load(file)
+                lang_config = config.get("lang", {"override": False, "selected_lang": "auto"})
+                override = lang_config.get("override", False)
+                lang_prefix = lang_config.get("selected_lang", "auto")
+        except (FileNotFoundError, json.JSONDecodeError, KeyError):
+            override = False
+            lang_prefix = "auto"
 
         self.language = lang_prefix
 
