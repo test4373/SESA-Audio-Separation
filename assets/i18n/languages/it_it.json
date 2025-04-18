@@ -265,7 +265,7 @@
   "save_preset": "Salva Preimpostazione",
   "delete_preset": "Elimina Preimpostazione",
   "refresh_presets": "Aggiorna Preimpostazioni",
-  "presets_name": "Nome Preimpostazione",
+  "preset_name": "Nome Preimpostazione",
   "select_preset": "Seleziona Preimpostazione",
   "add_favorite": "Aggiungi ai Preferiti",
   "apollo_midside_model_info": "Modello da usare per l'elaborazione mid/side (opzionale)",
