@@ -265,7 +265,7 @@
   "save_preset": "Guardar Preajuste",
   "delete_preset": "Eliminar Preajuste",
   "refresh_presets": "Actualizar Preajustes",
-  "presets_name": "Nombre del Preajuste",
+  "preset_name": "Nombre del Preajuste",
   "select_preset": "Seleccionar Preajuste",
   "add_favorite": "Añadir a Favoritos",
   "apollo_midside_model_info": "Modelo a usar para procesamiento centro/lateral (opcional)",
