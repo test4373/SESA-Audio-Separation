@@ -265,7 +265,7 @@
   "save_preset": "Voreinstellung Speichern",
   "delete_preset": "Voreinstellung Löschen",
   "refresh_presets": "Voreinstellungen Aktualisieren",
-  "presets_name": "Name der Voreinstellung",
+  "preset_name": "Name der Voreinstellung",
   "select_preset": "Voreinstellung Auswählen",
   "add_favorite": "Zu Favoriten Hinzufügen",
   "apollo_midside_model_info": "Modell für Mitte/Seite-Verarbeitung (optional)",
