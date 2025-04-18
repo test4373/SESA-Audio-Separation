@@ -265,7 +265,7 @@
   "save_preset": "保存预设",
   "delete_preset": "删除预设",
   "refresh_presets": "刷新预设",
-  "presets_name": "预设名称",
+  "preset_name": "预设名称",
   "select_preset": "选择预设",
   "add_favorite": "添加到收藏",
   "apollo_midside_model_info": "用于中/侧处理的模型（可选）",
