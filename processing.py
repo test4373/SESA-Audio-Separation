@@ -12,7 +12,7 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(current_dir)
 
 from datetime import datetime
-from helpers import INPUT_DIR, OLD_OUTPUT_DIR, ENSEMBLE_DIR, AUTO_ENSEMBLE_TEMP, move_old_files, clear_directory, BASE_DIR
+from helpers import INPUT_DIR, OLD_OUTPUT_DIR, ENSEMBLE_DIR, AUTO_ENSEMBLE_TEMP, move_old_files, clear_directory, BASE_DIR, extract_model_name_from_checkpoint
 from model import get_model_config
 import torch
 import yaml
@@ -679,17 +679,13 @@ def auto_ensemble_process(
         else:
             audio_path = auto_input_audio_file.name if hasattr(auto_input_audio_file, 'name') else auto_input_audio_file
 
-        # Debug log for raw UI inputs
         print(f"Raw UI inputs - auto_apollo_chunk_size: {auto_apollo_chunk_size}, auto_apollo_overlap: {auto_apollo_overlap}")
-
-        # Map auto_apollo_method to the correct string if it's a numeric value
         if auto_apollo_method == "2" or auto_apollo_method == 2:
             auto_apollo_method = "mid_side_method"
         elif auto_apollo_method == "1" or auto_apollo_method == 1:
             auto_apollo_method = "normal_method"
         print(f"Interpreted auto_apollo_method: {auto_apollo_method}")
 
-        # Ensure correct mapping of chunk_size and overlap
         corrected_auto_chunk_size = int(auto_apollo_chunk_size)
         corrected_auto_overlap = int(auto_apollo_overlap)
         print(f"Corrected values - auto_apollo_chunk_size: {corrected_auto_chunk_size}, auto_apollo_overlap: {corrected_auto_overlap}")
@@ -702,23 +698,22 @@ def auto_ensemble_process(
 
         all_outputs = []
         total_models = len(selected_models)
-        # Allocate 60% of progress for model processing
-        model_progress_range = 60  # 0-60%
+        model_progress_range = 60
         model_progress_per_step = model_progress_range / total_models if total_models > 0 else 0
 
         for i, model in enumerate(selected_models):
-            clean_model = extract_model_name_from_checkpoint(model)
-            model_output_dir = os.path.join(auto_ensemble_temp, clean_model)
+            clean_model_name = clean_model(model)  # Use clean_model to remove ⭐
+            model_output_dir = os.path.join(auto_ensemble_temp, clean_model_name)
             os.makedirs(model_output_dir, exist_ok=True)
 
             current_progress = i * model_progress_per_step
             current_progress = clamp_percentage(current_progress)
-            yield None, i18n("loading_model").format(i+1, total_models, clean_model), update_progress_html(
-                i18n("loading_model_progress_label").format(i+1, total_models, clean_model, current_progress),
+            yield None, i18n("loading_model").format(i+1, total_models, clean_model_name), update_progress_html(
+                i18n("loading_model_progress_label").format(i+1, total_models, clean_model_name, current_progress),
                 current_progress
             )
 
-            model_type, config_path, start_check_point = get_model_config(clean_model, auto_chunk_size, auto_overlap)
+            model_type, config_path, start_check_point = get_model_config(clean_model_name, auto_chunk_size, auto_overlap)
 
             cmd = [
                 "python", INFERENCE_PATH,
@@ -749,12 +744,11 @@ def auto_ensemble_process(
                 if "Progress:" in line:
                     try:
                         percentage = float(re.search(r"Progress: (\d+\.\d+)%", line).group(1))
-                        # Scale the percentage within the current model's progress range
                         model_percentage = (percentage / 100) * model_progress_per_step
                         current_progress = (i * model_progress_per_step) + model_percentage
                         current_progress = clamp_percentage(current_progress)
-                        yield None, i18n("loading_model").format(i+1, total_models, clean_model), update_progress_html(
-                            i18n("loading_model_progress_label").format(i+1, total_models, clean_model, current_progress),
+                        yield None, i18n("loading_model").format(i+1, total_models, clean_model_name), update_progress_html(
+                            i18n("loading_model_progress_label").format(i+1, total_models, clean_model_name, current_progress),
                             current_progress
                         )
                     except (AttributeError, ValueError) as e:
@@ -778,8 +772,8 @@ def auto_ensemble_process(
 
             current_progress = (i + 1) * model_progress_per_step
             current_progress = clamp_percentage(current_progress)
-            yield None, i18n("completed_model").format(i+1, total_models, clean_model), update_progress_html(
-                i18n("completed_model_progress_label").format(i+1, total_models, clean_model, current_progress),
+            yield None, i18n("completed_model").format(i+1, total_models, clean_model_name), update_progress_html(
+                i18n("completed_model_progress_label").format(i+1, total_models, clean_model_name, current_progress),
                 current_progress
             )
 
@@ -787,6 +781,7 @@ def auto_ensemble_process(
             if not model_outputs:
                 raise FileNotFoundError(i18n("model_output_failed").format(model))
             all_outputs.extend(model_outputs)
+
 
         enhanced_outputs = []
         if auto_use_apollo:
