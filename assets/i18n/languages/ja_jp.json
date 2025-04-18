@@ -261,6 +261,13 @@
   "apollo_normal_model_info": "通常Apollo処理に使用するモデル",
   "apollo_midside_model": "Apolloミッド/サイドモデル",
   "apollo_enhancement_info": "音質の改善",
+  "selected_models": "選択されたモデル",
+  "save_preset": "プリセットを保存",
+  "delete_preset": "プリセットを削除",
+  "refresh_presets": "プリセットを更新",
+  "presets_name": "プリセット名",
+  "select_preset": "プリセットを選択",
+  "add_favorite": "お気に入りに追加",
   "apollo_midside_model_info": "ミッド/サイド処理に使用するモデル (オプション)",
   "language_changed_message": "言語が変更されました。セルを再起動してください。"
 }
