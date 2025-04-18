@@ -274,7 +274,7 @@
   "save_preset": "プリセットを保存",
   "delete_preset": "プリセットを削除",
   "refresh_presets": "プリセットを更新",
-  "presets_name": "プリセット名",
+  "preset_name": "プリセット名",
   "select_preset": "プリセットを選択",
   "add_favorite": "お気に入りに追加",
 }
