@@ -261,6 +261,13 @@
   "apollo_normal_model_info": "Modell für normale Apollo-Verarbeitung",
   "apollo_midside_model": "Apollo Mitte/Seite-Modell",
   "apollo_enhancement_info": "Verbesserung der Klangqualität",
+  "selected_models": "Ausgewählte Modelle",
+  "save_preset": "Voreinstellung Speichern",
+  "delete_preset": "Voreinstellung Löschen",
+  "refresh_presets": "Voreinstellungen Aktualisieren",
+  "presets_name": "Name der Voreinstellung",
+  "select_preset": "Voreinstellung Auswählen",
+  "add_favorite": "Zu Favoriten Hinzufügen",
   "apollo_midside_model_info": "Modell für Mitte/Seite-Verarbeitung (optional)",
   "language_changed_message": "Sprache geändert. Bitte starte die Zelle neu."
 }
