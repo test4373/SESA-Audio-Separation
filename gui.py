@@ -12,6 +12,7 @@ from download import download_callback
 from model import get_model_config, MODEL_CONFIGS
 from processing import process_audio, auto_ensemble_process, ensemble_audio_fn, refresh_auto_output, copy_ensemble_to_drive, copy_to_drive
 from assets.i18n.i18n import I18nAuto
+from config_manager import load_config, save_config, update_favorites, save_preset, delete_preset, clean_model
 
 # BASE_DIR tanımı
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -149,8 +150,16 @@ def create_interface():
     }
     """
 
+    # Load user config at startup
+    user_config = load_config()
+    initial_settings = user_config["settings"]
+    initial_favorites = user_config["favorites"]
+    initial_presets = user_config["presets"]
+
     with gr.Blocks(theme=gr.themes.Soft(), css=css) as demo:
         current_lang = gr.State(value=i18n.language)
+        favorites_state = gr.State(value=initial_favorites)
+        presets_state = gr.State(value=initial_presets)
 
         header_html = gr.HTML(
             value=f"""
@@ -178,12 +187,15 @@ def create_interface():
                                 model_category = gr.Dropdown(
                                     label=i18n("category"),
                                     choices=[i18n(cat) for cat in MODEL_CONFIGS.keys()],
-                                    value=i18n("Vocal Models")
+                                    value=i18n(initial_settings["model_category"])
                                 )
-                                model_dropdown = gr.Dropdown(
-                                    label=i18n("model"),
-                                    choices=list(MODEL_CONFIGS["Vocal Models"].keys())
-                                )
+                                favorite_button = gr.Button(i18n("add_favorite"), variant="secondary", scale=0)
+
+                            model_dropdown = gr.Dropdown(
+                                label=i18n("model"),
+                                choices=update_model_dropdown(i18n(initial_settings["model_category"]), favorites=initial_favorites)["choices"],
+                                value=initial_settings["selected_model"]
+                            )
 
                         with gr.Accordion(i18n("settings"), open=False) as settings_accordion:
                             with gr.Row():
@@ -191,13 +203,13 @@ def create_interface():
                                     export_format = gr.Dropdown(
                                         label=i18n("format"),
                                         choices=['wav FLOAT', 'flac PCM_16', 'flac PCM_24'],
-                                        value='wav FLOAT'
+                                        value=initial_settings["export_format"]
                                     )
                                 with gr.Column(scale=1):
                                     chunk_size = gr.Dropdown(
                                         label=i18n("chunk_size"),
                                         choices=[352800, 485100],
-                                        value=352800,
+                                        value=initial_settings["chunk_size"],
                                         info=i18n("chunk_size_info")
                                     )
 
@@ -208,7 +220,7 @@ def create_interface():
                                         maximum=50,
                                         step=1,
                                         label=i18n("overlap"),
-                                        value=2,
+                                        value=initial_settings["overlap"],
                                         info=i18n("overlap_info")
                                     )
 
@@ -216,30 +228,33 @@ def create_interface():
                                 with gr.Column(scale=1):
                                     use_tta = gr.Checkbox(
                                         label=i18n("tta_boost"),
-                                        info=i18n("tta_info")
+                                        info=i18n("tta_info"),
+                                        value=initial_settings["use_tta"]
                                     )
-                                    
+
                             with gr.Row():
                                 with gr.Column(scale=1):
                                     use_demud_phaseremix_inst = gr.Checkbox(
                                         label=i18n("phase_fix"),
-                                        info=i18n("phase_fix_info")
+                                        info=i18n("phase_fix_info"),
+                                        value=initial_settings["use_demud_phaseremix_inst"]
                                     )
 
                                 with gr.Column(scale=1):
                                     extract_instrumental = gr.Checkbox(
                                         label=i18n("instrumental"),
-                                        info=i18n("instrumental_info")
+                                        info=i18n("instrumental_info"),
+                                        value=initial_settings["extract_instrumental"]
                                     )
 
                             with gr.Row():
                                 use_apollo = gr.Checkbox(
                                     label=i18n("enhance_with_apollo"),
-                                    value=False,
+                                    value=initial_settings["use_apollo"],
                                     info=i18n("apollo_enhancement_info")
                                 )
 
-                            with gr.Group(visible=False) as apollo_settings_group:
+                            with gr.Group(visible=initial_settings["use_apollo"]) as apollo_settings_group:
                                 with gr.Row():
                                     with gr.Column(scale=1):
                                         apollo_chunk_size = gr.Slider(
@@ -247,7 +262,7 @@ def create_interface():
                                             minimum=3,
                                             maximum=25,
                                             step=1,
-                                            value=19,
+                                            value=initial_settings["apollo_chunk_size"],
                                             info=i18n("apollo_chunk_size_info"),
                                             interactive=True
                                         )
@@ -257,7 +272,7 @@ def create_interface():
                                             minimum=2,
                                             maximum=10,
                                             step=1,
-                                            value=2,
+                                            value=initial_settings["apollo_overlap"],
                                             info=i18n("apollo_overlap_info"),
                                             interactive=True
                                         )
@@ -266,23 +281,23 @@ def create_interface():
                                     apollo_method = gr.Dropdown(
                                         label=i18n("apollo_processing_method"),
                                         choices=[i18n("normal_method"), i18n("mid_side_method")],
-                                        value=i18n("normal_method"),
+                                        value=i18n(initial_settings["apollo_method"]),
                                         interactive=True
                                     )
 
-                                with gr.Row(visible=True) as apollo_normal_model_row:
+                                with gr.Row(visible=initial_settings["apollo_method"] != "mid_side_method") as apollo_normal_model_row:
                                     apollo_normal_model = gr.Dropdown(
                                         label=i18n("apollo_normal_model"),
                                         choices=["MP3 Enhancer", "Lew Vocal Enhancer", "Lew Vocal Enhancer v2 (beta)", "Apollo Universal Model"],
-                                        value="Apollo Universal Model",
+                                        value=initial_settings["apollo_normal_model"],
                                         interactive=True
                                     )
 
-                                with gr.Row(visible=False) as apollo_midside_model_row:
+                                with gr.Row(visible=initial_settings["apollo_method"] == "mid_side_method") as apollo_midside_model_row:
                                     apollo_midside_model = gr.Dropdown(
                                         label=i18n("apollo_mid_side_model"),
                                         choices=["MP3 Enhancer", "Lew Vocal Enhancer", "Lew Vocal Enhancer v2 (beta)", "Apollo Universal Model"],
-                                        value="Apollo Universal Model",
+                                        value=initial_settings["apollo_midside_model"],
                                         interactive=True
                                     )
 
@@ -290,6 +305,38 @@ def create_interface():
                             process_btn = gr.Button(i18n("process"), variant="primary")
                             clear_old_output_btn = gr.Button(i18n("reset"), variant="secondary")
                         clear_old_output_status = gr.Textbox(label=i18n("status"), interactive=False)
+
+                        # Favorite handler
+                        def update_favorite_button(model, favorites):
+                            cleaned_model = clean_model(model) if model else None
+                            is_favorited = cleaned_model in favorites if cleaned_model else False
+                            return gr.update(value=i18n("remove_favorite") if is_favorited else i18n("add_favorite"))
+
+                        def toggle_favorite(model, favorites):
+                            if not model:
+                                return favorites, gr.update(), gr.update()
+                            cleaned_model = clean_model(model)
+                            is_favorited = cleaned_model in favorites
+                            new_favorites = update_favorites(favorites, cleaned_model, add=not is_favorited)
+                            save_config(new_favorites, load_config()["settings"], load_config()["presets"])
+                            category = model_category.value
+                            return (
+                                new_favorites,
+                                gr.update(choices=update_model_dropdown(category, favorites=new_favorites)["choices"]),
+                                gr.update(value=i18n("add_favorite") if is_favorited else i18n("remove_favorite"))
+                            )
+
+                        model_dropdown.change(
+                            fn=update_favorite_button,
+                            inputs=[model_dropdown, favorites_state],
+                            outputs=favorite_button
+                        )
+
+                        favorite_button.click(
+                            fn=toggle_favorite,
+                            inputs=[model_dropdown, favorites_state],
+                            outputs=[favorites_state, model_dropdown, favorite_button]
+                        )
 
                         use_apollo.change(
                             fn=lambda x: gr.update(visible=x),
@@ -368,7 +415,10 @@ def create_interface():
                 with gr.Row():
                     with gr.Column():
                         with gr.Group():
-                            auto_input_audio_file = gr.File(label=i18n("upload_file"))
+                            auto_input_audio_file = gr.File(
+                                file_types=[".wav", ".mp3", ".m4a", ".mp4", ".mkv", ".flac"],
+                                label=i18n("upload_file")
+                            )
                             auto_file_path_input = gr.Textbox(
                                 label=i18n("enter_file_path"),
                                 placeholder=i18n("file_path_placeholder"),
@@ -461,14 +511,31 @@ def create_interface():
                                     choices=[i18n(cat) for cat in MODEL_CONFIGS.keys()],
                                     value=i18n("Vocal Models")
                                 )
-
                                 selected_models = gr.Dropdown(
                                     label=i18n("select_models"),
-                                    choices=list(MODEL_CONFIGS["Vocal Models"].keys()),
+                                    choices=update_model_dropdown(i18n("Vocal Models"), favorites=initial_favorites)["choices"],
                                     multiselect=True,
                                     max_choices=50,
                                     interactive=True
                                 )
+
+                            with gr.Row():
+                                preset_dropdown = gr.Dropdown(
+                                    label=i18n("select_preset"),
+                                    choices=list(initial_presets.keys()),
+                                    value=None,
+                                    allow_custom_value=False,
+                                    interactive=True
+                                )
+                            with gr.Row():
+                                preset_name_input = gr.Textbox(
+                                    label=i18n("preset_name"),
+                                    placeholder=i18n("enter_preset_name"),
+                                    interactive=True
+                                )
+                                save_preset_btn = gr.Button(i18n("save_preset"), variant="secondary", scale=0)
+                                delete_preset_btn = gr.Button(i18n("delete_preset"), variant="secondary", scale=0)
+                                refresh_presets_btn = gr.Button(i18n("refresh_presets"), variant="secondary", scale=0)
 
                         with gr.Group():
                             ensemble_settings_header = gr.Markdown(f"### {i18n('ensemble_settings')}")
@@ -477,12 +544,64 @@ def create_interface():
                                     label=i18n("method"),
                                     choices=['avg_wave', 'median_wave', 'min_wave', 'max_wave',
                                              'avg_fft', 'median_fft', 'min_fft', 'max_fft'],
-                                    value='avg_wave'
+                                    value=initial_settings["auto_ensemble_type"]
                                 )
 
                             ensemble_recommendation = gr.Markdown(i18n("recommendation"))
 
                         auto_process_btn = gr.Button(i18n("start_processing"), variant="primary")
+
+                        def load_preset(preset_name, presets, category):
+                            if preset_name and preset_name in presets:
+                                preset = presets[preset_name]
+                                return (
+                                    gr.update(value=[clean_model(model) for model in preset["models"]]),
+                                    gr.update(value=preset["ensemble_method"])
+                                )
+                            return gr.update(), gr.update()
+
+                        def sync_presets():
+                            """Reload presets from config and update dropdown."""
+                            config = load_config()
+                            return config["presets"], gr.update(choices=list(config["presets"].keys()), value=None)
+
+                        preset_dropdown.change(
+                            fn=load_preset,
+                            inputs=[preset_dropdown, presets_state, auto_category_dropdown],
+                            outputs=[selected_models, auto_ensemble_type]
+                        )
+
+                        def handle_save_preset(preset_name, models, ensemble_method, presets):
+                            if not preset_name or not models:
+                                return gr.update(), presets
+                            new_presets = save_preset(presets, preset_name, models, ensemble_method)
+                            save_config(load_config()["favorites"], load_config()["settings"], new_presets)
+                            return gr.update(choices=list(new_presets.keys()), value=None), new_presets
+
+                        save_preset_btn.click(
+                            fn=handle_save_preset,
+                            inputs=[preset_name_input, selected_models, auto_ensemble_type, presets_state],
+                            outputs=[preset_dropdown, presets_state]
+                        )
+
+                        def handle_delete_preset(preset_name, presets):
+                            if not preset_name or preset_name not in presets:
+                                return gr.update(), presets
+                            new_presets = delete_preset(presets, preset_name)
+                            save_config(load_config()["favorites"], load_config()["settings"], new_presets)
+                            return gr.update(choices=list(new_presets.keys()), value=None), new_presets
+
+                        delete_preset_btn.click(
+                            fn=handle_delete_preset,
+                            inputs=[preset_dropdown, presets_state],
+                            outputs=[preset_dropdown, presets_state]
+                        )
+
+                        refresh_presets_btn.click(
+                            fn=sync_presets,
+                            inputs=[],
+                            outputs=[presets_state, preset_dropdown]
+                        )
 
                         auto_use_apollo.change(
                             fn=lambda x: gr.update(visible=x),
@@ -617,7 +736,54 @@ def create_interface():
                                 elem_id="process-btn"
                             )
 
-        model_category.change(fn=update_model_dropdown, inputs=model_category, outputs=model_dropdown)
+        def save_settings_on_process(*args):
+            apollo_method_value = args[11]
+            backend_apollo_method = "mid_side_method" if apollo_method_value == i18n("mid_side_method") else "normal_method"
+            cleaned_model = clean_model(args[1]) if args[1] else None
+            settings = {
+                "chunk_size": args[2],
+                "overlap": args[3],
+                "export_format": args[4],
+                "use_tta": args[5],
+                "use_demud_phaseremix_inst": args[6],
+                "extract_instrumental": args[7],
+                "use_apollo": args[8],
+                "apollo_chunk_size": args[9],
+                "apollo_overlap": args[10],
+                "apollo_method": backend_apollo_method,
+                "apollo_normal_model": args[12],
+                "apollo_midside_model": args[13],
+                "model_category": args[14],
+                "selected_model": cleaned_model,
+                "auto_ensemble_type": args[7]
+            }
+            save_config(load_config()["favorites"], settings, load_config()["presets"])
+            modified_args = list(args)
+            modified_args[1] = cleaned_model
+            modified_args[15] = cleaned_model
+            return process_audio(*modified_args)
+
+        def save_auto_ensemble_settings(*args):
+            settings = load_config()["settings"]
+            settings["auto_ensemble_type"] = args[7]
+            save_config(load_config()["favorites"], settings, load_config()["presets"])
+            # Handle generator output from auto_ensemble_process
+            output_audio, status, progress_html = None, i18n("waiting_for_processing"), ensemble_progress_html.value
+            for update in auto_ensemble_process(*args):
+                if isinstance(update, tuple) and len(update) == 3:
+                    output_audio, status, progress_html = update
+            return output_audio, status, progress_html
+
+        def update_category_dropdowns(cat):
+            choices = update_model_dropdown(cat, favorites=load_config()["favorites"])["choices"]
+            return gr.update(choices=choices), gr.update(choices=choices)
+
+        model_category.change(
+            fn=update_category_dropdowns,
+            inputs=model_category,
+            outputs=[model_dropdown, selected_models]
+        )
+
         clear_old_output_btn.click(fn=clear_old_output, outputs=clear_old_output_status)
 
         input_audio_file.upload(
@@ -642,26 +808,35 @@ def create_interface():
             outputs=[auto_input_audio_file, original_audio2]
         )
 
-        auto_category_dropdown.change(fn=update_model_dropdown, inputs=auto_category_dropdown, outputs=selected_models)
+        auto_category_dropdown.change(
+            fn=lambda cat: gr.update(choices=update_model_dropdown(cat, favorites=load_config()["favorites"])["choices"]),
+            inputs=auto_category_dropdown,
+            outputs=selected_models
+        )
 
         def debug_inputs(*args):
             input_names = [
                 "input_audio_file", "model_dropdown", "chunk_size", "overlap", "export_format",
                 "use_tta", "use_demud_phaseremix_inst", "extract_instrumental",
                 "use_apollo", "apollo_chunk_size", "apollo_overlap",
-                "apollo_method", "apollo_normal_model", "apollo_midside_model"
+                "apollo_method", "apollo_normal_model", "apollo_midside_model",
+                "model_category", "selected_model"
             ]
-            for name, value in zip(input_names, args):
+            cleaned_args = list(args)
+            cleaned_args[1] = clean_model(cleaned_args[1]) if cleaned_args[1] else None
+            cleaned_args[15] = clean_model(cleaned_args[15]) if cleaned_args[15] else None
+            for name, value in zip(input_names, cleaned_args):
                 print(f"UI Input - {name}: {value}")
             return args
 
         process_btn.click(
-            fn=lambda *args: process_audio(*debug_inputs(*args)),
+            fn=lambda *args: save_settings_on_process(*debug_inputs(*args)),
             inputs=[
                 input_audio_file, model_dropdown, chunk_size, overlap, export_format,
                 use_tta, use_demud_phaseremix_inst, extract_instrumental,
                 use_apollo, apollo_chunk_size, apollo_overlap,
-                apollo_method, apollo_normal_model, apollo_midside_model
+                apollo_method, apollo_normal_model, apollo_midside_model,
+                model_category, model_dropdown
             ],
             outputs=[
                 vocals_audio, instrumental_audio, phaseremix_audio, drum_audio, karaoke_audio,
@@ -672,7 +847,7 @@ def create_interface():
         )
 
         auto_process_btn.click(
-            fn=auto_ensemble_process,
+            fn=save_auto_ensemble_settings,
             inputs=[
                 auto_input_audio_file,
                 selected_models,
