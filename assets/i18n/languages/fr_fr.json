@@ -265,7 +265,7 @@
   "save_preset": "Enregistrer le Préréglage",
   "delete_preset": "Supprimer le Préréglage",
   "refresh_presets": "Actualiser les Préréglages",
-  "presets_name": "Nom du Préréglage",
+  "preset_name": "Nom du Préréglage",
   "select_preset": "Sélectionner un Préréglage",
   "add_favorite": "Ajouter aux Favoris",
   "apollo_midside_model_info": "Modèle à utiliser pour le traitement centre/côté (optionnel)",
