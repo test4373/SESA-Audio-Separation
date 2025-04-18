@@ -23,6 +23,7 @@ import tempfile
 import shutil
 import json
 from tqdm import tqdm
+import time
 
 class AudioEnsembleEngine:
     def __init__(self):
@@ -180,14 +181,44 @@ class AudioEnsembleEngine:
     def process_spectral(self, chunks, method):
         """All frequency domain processing methods."""
         specs = []
+        min_samples = min(chunk.shape[1] for chunk in chunks)
+        nperseg = min(1024, min_samples)  # Adjust nperseg to fit shortest chunk
+        noverlap = nperseg // 2
+        self.log_message(f"STFT parameters: nperseg={nperseg}, noverlap={noverlap}, min_samples={min_samples}")
+
         for c in chunks:
+            # Truncate chunk to minimum length to ensure consistent STFT shapes
+            c = c[:, :min_samples]
             channel_specs = []
             for channel in range(c.shape[0]):
-                _, _, Zxx = stft(c[channel], nperseg=1024, noverlap=512)
-                channel_specs.append(Zxx)
+                if c.shape[1] < 256:  # Minimum reasonable length for STFT
+                    self.log_message(f"Warning: Chunk too short ({c.shape[1]} samples) for STFT. Skipping.")
+                    return None
+                try:
+                    freqs, times, Zxx = stft(
+                        c[channel],
+                        nperseg=nperseg,
+                        noverlap=noverlap,
+                        window='hann'
+                    )
+                    channel_specs.append(Zxx)
+                except Exception as e:
+                    self.log_message(f"STFT failed for channel: {str(e)}")
+                    return None
             specs.append(np.array(channel_specs))
         
+        if not specs:
+            self.log_message("No valid STFTs computed.")
+            return None
+
         specs = np.array(specs)
+        self.log_message(f"STFT shapes: {[spec.shape for spec in specs]}")
+        
+        # Ensure all STFTs have the same shape
+        min_freqs = min(spec.shape[1] for spec in specs)
+        min_times = min(spec.shape[2] for spec in specs)
+        specs = np.array([spec[:, :min_freqs, :min_times] for spec in specs])
+        
         mag = np.abs(specs)
         
         if method == 'max_fft':
@@ -203,8 +234,20 @@ class AudioEnsembleEngine:
         # ISTFT reconstruction
         reconstructed = np.zeros((combined_spec.shape[0], chunks[0].shape[1]))
         for channel in range(combined_spec.shape[0]):
-            _, xrec = istft(combined_spec[channel], nperseg=1024, noverlap=512)
-            reconstructed[channel] = xrec[:chunks[0].shape[1]]
+            try:
+                _, xrec = istft(
+                    combined_spec[channel],
+                    nperseg=nperseg,
+                    noverlap=noverlap,
+                    window='hann'
+                )
+                # Truncate or pad to match original chunk length
+                if xrec.shape[0] < chunks[0].shape[1]:
+                    xrec = np.pad(xrec, (0, chunks[0].shape[1] - xrec.shape[0]), mode='constant')
+                reconstructed[channel] = xrec[:chunks[0].shape[1]]
+            except Exception as e:
+                self.log_message(f"ISTFT failed for channel: {str(e)}")
+                return None
         
         return reconstructed
     
@@ -252,10 +295,14 @@ class AudioEnsembleEngine:
                             chunks.append(data.T)  # Transpose to (channels, samples)
                         
                         chunks = np.array(chunks)
+                        self.log_message(f"Chunk shape: {chunks.shape}, pos={pos}")
                         
                         # Process based on method type
                         if method.endswith('_fft'):
                             result = self.process_spectral(chunks, method)
+                            if result is None:
+                                self.log_message("Spectral processing failed, falling back to avg_wave")
+                                result = self.process_waveform(chunks, 'avg_wave', weights)
                         else:
                             result = self.process_waveform(chunks, method, weights)
                         
