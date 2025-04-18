@@ -119,6 +119,7 @@ def create_interface():
         background: linear-gradient(to right, #6e8efb, #ff4040);
         border-radius: 5px;
         transition: width 0.5s ease-in-out;
+        max-width: 100% !important;
     }
     .gr-accordion {
         background: rgba(128, 0, 0, 0.5) !important;
