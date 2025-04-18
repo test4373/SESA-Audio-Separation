@@ -785,7 +785,20 @@ def auto_ensemble_process(
                 raise FileNotFoundError(i18n("model_output_failed").format(clean_model_name))
             all_outputs.extend(model_outputs)
 
+        # Select compatible files for ensemble (e.g., all 'instrumental' or all 'vocals')
+        preferred_type = 'instrumental' if auto_extract_instrumental else 'vocals'
+        ensemble_files = []
+        for output in all_outputs:
+            if preferred_type.lower() in output.lower():
+                ensemble_files.append(output)
+        print(f"Selected ensemble files: {ensemble_files}")
+        if len(ensemble_files) < 2:
+            print(f"Warning: Insufficient {preferred_type} files ({len(ensemble_files)}). Falling back to all outputs.")
+            ensemble_files = all_outputs
+            if len(ensemble_files) < 2:
+                raise ValueError(i18n("insufficient_files_for_ensemble").format(len(ensemble_files)))
 
+        # Enhanced outputs with Apollo (if enabled)
         enhanced_outputs = []
         if auto_use_apollo:
             apollo_script = "/content/Apollo/inference.py"
@@ -934,7 +947,7 @@ def auto_ensemble_process(
             i18n("performing_ensemble_progress_label"), 90
         )
 
-        quoted_files = [f'"{f}"' for f in all_outputs]
+        quoted_files = [f'"{f}"' for f in ensemble_files]
         timestamp = str(int(time.time()))
         output_path = os.path.join(AUTO_ENSEMBLE_OUTPUT, f"ensemble_{timestamp}.wav")
 
