@@ -265,7 +265,7 @@
   "save_preset": "Сохранить пресет",
   "delete_preset": "Удалить пресет",
   "refresh_presets": "Обновить пресеты",
-  "presets_name": "Имя пресета",
+  "preset_name": "Имя пресета",
   "select_preset": "Выбрать пресет",
   "add_favorite": "Добавить в избранное",
   "apollo_midside_model_info": "Модель, используемая для обработки середины/сторон (опционально)",
