@@ -264,7 +264,7 @@
   "save_preset": "Save Preset",
   "delete_preset": "Delete Preset",
   "refresh_presets": "Refresh Presets",
-  "presets_name": "Preset Name",
+  "preset_name": "Preset Name",
   "select_preset": "Select Preset",
   "add_favorite": "Add to Favorites",
   "invalid_method": "Error: Invalid method! Use 'gradio', 'localtunnel', or 'ngrok'.",
