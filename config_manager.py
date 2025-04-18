@@ -1,6 +1,6 @@
-import os
+from helpers import clean_model
 import json
-from pathlib import Path
+import os
 import logging
 
 # Set up logging (errors only)
@@ -8,16 +8,12 @@ logging.basicConfig(level=logging.ERROR, format="%(asctime)s - %(levelname)s - %
 logger = logging.getLogger(__name__)
 
 # Config path in Google Drive
-CONFIG_PATH = "/content/drive/MyDrive/SESA-Audio-Separation/user_config.json"
-
-def clean_model(model):
-    """Remove ⭐ prefix from model name."""
-    return model.replace("⭐ ", "") if model.startswith("⭐ ") else model
+CONFIG_FILE = "/content/drive/MyDrive/SESA-Audio-Separation/user_config.json"
 
 def load_config():
-    """Load user settings, favorites, and presets from config file, return defaults if file is missing."""
     default_config = {
         "favorites": [],
+        "presets": {},
         "settings": {
             "chunk_size": 352800,
             "overlap": 2,
@@ -33,63 +29,77 @@ def load_config():
             "apollo_midside_model": "Apollo Universal Model",
             "model_category": "Vocal Models",
             "selected_model": None,
-            "auto_ensemble_type": "avg_wave"
-        },
-        "presets": {}
+            "auto_ensemble_type": "avg_wave",
+            "auto_category": "Vocal Models",  # Already added from previous fix
+            "selected_models": []  # Add this line
+        }
     }
     try:
-        if os.path.exists(CONFIG_PATH):
-            with open(CONFIG_PATH, 'r') as f:
+        if os.path.exists(CONFIG_FILE):
+            with open(CONFIG_FILE, "r", encoding="utf-8") as f:
                 config = json.load(f)
-            # Merge with defaults to handle missing keys
-            for key in default_config:
-                if key not in config:
-                    config[key] = default_config[key]
-                elif isinstance(default_config[key], dict):
-                    for subkey in default_config[key]:
-                        if subkey not in config[key]:
-                            config[key][subkey] = default_config[key][subkey]
-            return config
-        else:
-            logger.error(f"Config file not found at {CONFIG_PATH}. Using defaults.")
+                # Ensure all default keys exist
+                for key, value in default_config.items():
+                    if key not in config:
+                        config[key] = value
+                # Ensure all settings keys exist
+                for key, value in default_config["settings"].items():
+                    if key not in config["settings"]:
+                        config["settings"][key] = value
+                return config
+        return default_config
     except Exception as e:
-        logger.error(f"Error loading user_config: {e}. Using defaults.")
-    return default_config
+        print(f"Error loading config: {e}")
+        return default_config
 
 def save_config(favorites, settings, presets):
-    """Save favorites, settings, and presets to config file."""
     config = {
         "favorites": favorites,
         "settings": settings,
         "presets": presets
     }
     try:
-        os.makedirs(os.path.dirname(CONFIG_PATH), exist_ok=True)
-        with open(CONFIG_PATH, 'w') as f:
-            json.dump(config, f, indent=4)
+        os.makedirs(os.path.dirname(CONFIG_FILE), exist_ok=True)
+        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+            json.dump(config, f, indent=4, ensure_ascii=False)
+        print("Config saved successfully.")
     except Exception as e:
-        logger.error(f"Error saving user_config: {e}")
+        print(f"Error saving config: {e}")
 
-def update_favorites(current_favorites, model, add=True):
-    """Add or remove a model from favorites."""
-    new_favorites = current_favorites.copy()
-    if add and model not in new_favorites:
-        new_favorites.append(model)
-    elif not add and model in new_favorites:
-        new_favorites.remove(model)
+def update_favorites(favorites, model, add=True):
+    cleaned_model = clean_model(model)
+    new_favorites = favorites.copy()
+    if add and cleaned_model not in new_favorites:
+        new_favorites.append(cleaned_model)
+    elif not add and cleaned_model in new_favorites:
+        new_favorites.remove(cleaned_model)
     return new_favorites
 
 def save_preset(presets, preset_name, models, ensemble_method):
-    """Save a new preset or update an existing one, cleaning model names."""
+    if not preset_name:
+        print("Preset name cannot be empty.")
+        return presets
+    if not models:
+        print("No models selected.")
+        return presets
+    
+    # Include starred models from favorites
+    config = load_config()
+    favorites = config["favorites"]
+    # Combine selected models and favorites, remove duplicates
+    combined_models = list(set([clean_model(model) for model in models] + favorites))
+    
     new_presets = presets.copy()
     new_presets[preset_name] = {
-        "models": [clean_model(model) for model in models],
+        "models": combined_models,
         "ensemble_method": ensemble_method
     }
+    print(f"Preset '{preset_name}' saved with models: {combined_models}, method: {ensemble_method}")
     return new_presets
 
 def delete_preset(presets, preset_name):
-    """Delete a preset by name."""
     new_presets = presets.copy()
-    new_presets.pop(preset_name, None)
+    if preset_name in new_presets:
+        del new_presets[preset_name]
+        print(f"Preset '{preset_name}' deleted.")
     return new_presets
