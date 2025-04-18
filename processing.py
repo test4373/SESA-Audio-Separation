@@ -12,7 +12,7 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(current_dir)
 
 from datetime import datetime
-from helpers import INPUT_DIR, OLD_OUTPUT_DIR, ENSEMBLE_DIR, AUTO_ENSEMBLE_TEMP, move_old_files, clear_directory, BASE_DIR, extract_model_name_from_checkpoint
+from helpers import INPUT_DIR, OLD_OUTPUT_DIR, ENSEMBLE_DIR, AUTO_ENSEMBLE_TEMP, move_old_files, clear_directory, BASE_DIR, clean_model, extract_model_name_from_checkpoint
 from model import get_model_config
 import torch
 import yaml
@@ -493,7 +493,6 @@ def run_command_and_process_files(
         import traceback
         traceback.print_exc()
         return (None,) * 14
-
 def process_audio(input_audio_file, model, chunk_size, overlap, export_format, use_tta, demud_phaseremix_inst, extract_instrumental, use_apollo, apollo_chunk_size, apollo_overlap, apollo_method, apollo_normal_model, apollo_midside_model, progress=gr.Progress(track_tqdm=True), *args, **kwargs):
     try:
         if input_audio_file is not None:
@@ -510,8 +509,9 @@ def process_audio(input_audio_file, model, chunk_size, overlap, export_format, u
         move_old_files(OUTPUT_DIR)
 
         print(f"process_audio: model parameter received: {model}")
-        clean_model_name_full = extract_model_name_from_checkpoint(model)
-        print(f"Processing audio from: {audio_path} using model: {clean_model_name_full}")
+        # Clean the model name to remove ⭐ and other unwanted characters
+        clean_model_name = clean_model(model) if not model.startswith("/") else extract_model_name_from_checkpoint(model)
+        print(f"Processing audio from: {audio_path} using model: {clean_model_name}")
 
         print(f"Raw UI inputs - chunk_size: {chunk_size}, overlap: {overlap}, apollo_chunk_size: {apollo_chunk_size}, apollo_overlap: {apollo_overlap}, apollo_method: {apollo_method}")
 
@@ -553,7 +553,8 @@ def process_audio(input_audio_file, model, chunk_size, overlap, export_format, u
 
         print(f"Corrected values - inference_chunk_size: {inference_chunk_size}, inference_overlap: {inference_overlap}, apollo_chunk_size: {apollo_chunk_size}, apollo_overlap: {apollo_overlap}")
 
-        model_type, config_path, start_check_point = get_model_config(clean_model_name_full, chunk_size, overlap)
+        # Get model config using cleaned model name
+        model_type, config_path, start_check_point = get_model_config(clean_model_name, inference_chunk_size, inference_overlap)
         print(f"Model configuration: model_type={model_type}, config_path={config_path}, start_check_point={start_check_point}")
 
         outputs = run_command_and_process_files(
@@ -703,6 +704,7 @@ def auto_ensemble_process(
 
         for i, model in enumerate(selected_models):
             clean_model_name = clean_model(model)  # Use clean_model to remove ⭐
+            print(f"Processing model {i+1}/{total_models}: Original={model}, Cleaned={clean_model_name}")
             model_output_dir = os.path.join(auto_ensemble_temp, clean_model_name)
             os.makedirs(model_output_dir, exist_ok=True)
 
@@ -714,6 +716,7 @@ def auto_ensemble_process(
             )
 
             model_type, config_path, start_check_point = get_model_config(clean_model_name, auto_chunk_size, auto_overlap)
+            print(f"Model config: model_type={model_type}, config_path={config_path}, start_check_point={start_check_point}")
 
             cmd = [
                 "python", INFERENCE_PATH,
@@ -761,7 +764,7 @@ def auto_ensemble_process(
             process.wait()
             if process.returncode != 0:
                 print(i18n("error").format(stderr_output))
-                yield None, i18n("model_failed").format(model, stderr_output), update_progress_html(
+                yield None, i18n("model_failed").format(clean_model_name, stderr_output), update_progress_html(
                     i18n("error_occurred_progress_label"), 0
                 )
                 return
@@ -779,7 +782,7 @@ def auto_ensemble_process(
 
             model_outputs = glob.glob(os.path.join(model_output_dir, "*.wav"))
             if not model_outputs:
-                raise FileNotFoundError(i18n("model_output_failed").format(model))
+                raise FileNotFoundError(i18n("model_output_failed").format(clean_model_name))
             all_outputs.extend(model_outputs)
 
 
