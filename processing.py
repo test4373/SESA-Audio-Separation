@@ -837,7 +837,7 @@ def auto_ensemble_process(
 
             for idx, output_file in enumerate(all_outputs):
                 original_file_name = sanitize_filename(os.path.splitext(os.path.basename(output_file))[0])
-                enhancement_suffix = "_OrtaYanYükseltilmiş" if auto_apollo_method == "mid_side_method" else "_Yükseltilmiş"
+                enhancement_suffix = "_Mid_Side_Enhanced" if auto_apollo_method == "mid_side_method" else "_Enhanced"
                 enhanced_output = os.path.join(auto_ensemble_temp, f"{original_file_name}{enhancement_suffix}.wav")
 
                 current_progress = 60 + (idx * apollo_progress_per_file)
