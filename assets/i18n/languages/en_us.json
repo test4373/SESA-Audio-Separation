@@ -267,6 +267,13 @@
   "preset_name": "Preset Name",
   "select_preset": "Select Preset",
   "add_favorite": "Add to Favorites",
+  "apply_matchering": "Apply Matchering",
+  "matchering_info": "Apply Matchering to enhance audio mastering and balance",
+  "matchering_passes": "Matchering Passes",
+  "matchering_passes_info": "Number of Matchering iterations (1-5, higher values improve quality but take longer)",
+  "matchering_processing": "Applying Matchering... ({:.1f}%)",
+  "matchering_completed": "✅ Matchering processing completed!",
+  "matchering_error": "❌ Error during Matchering: {}",
   "invalid_method": "Error: Invalid method! Use 'gradio', 'localtunnel', or 'ngrok'.",
   "language_changed_message": "Language changed. please restart the cell."
 }
