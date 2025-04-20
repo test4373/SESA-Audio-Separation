@@ -34,7 +34,6 @@ if "auto_category" not in initial_settings or initial_settings["auto_category"] 
     initial_settings["auto_category"] = "Vocal Models"
 
 # Config dosyası yoksa oluştur
-# Create or update config file
 if not os.path.exists(CONFIG_FILE):
     default_config = {
         "lang": {"override": False, "selected_lang": "auto"},
@@ -52,8 +51,8 @@ else:  # If the file exists, load and update if necessary
         with open(CONFIG_FILE, "r", encoding="utf-8") as f:
             config = json.load(f)
         # Ensure 'lang' key exists
-        if "lang" not in config: # check if "lang" key exists
-            config["lang"] = {"override": False, "selected_lang": "auto"} # add it if not present
+        if "lang" not in config:
+            config["lang"] = {"override": False, "selected_lang": "auto"}
         # Add 'sharing' key if it doesn't exist
         if "sharing" not in config:
             config["sharing"] = {
@@ -234,10 +233,10 @@ def create_interface():
 
                             with gr.Row():
                                 model_category = gr.Dropdown(
-                                label=i18n("category"),
-                                choices=[i18n(cat) for cat in MODEL_CONFIGS.keys()],
-                                value=i18n(initial_settings["model_category"])
-                            )
+                                    label=i18n("category"),
+                                    choices=[i18n(cat) for cat in MODEL_CONFIGS.keys()],
+                                    value=i18n(initial_settings["model_category"])
+                                )
                                 favorite_button = gr.Button(i18n("add_favorite"), variant="secondary", scale=0)
 
                             model_dropdown = gr.Dropdown(
@@ -350,6 +349,24 @@ def create_interface():
                                         interactive=True
                                     )
 
+                            with gr.Row():
+                                use_matchering = gr.Checkbox(
+                                    label=i18n("apply_matchering"),
+                                    value=initial_settings.get("use_matchering", False),
+                                    info=i18n("matchering_info")
+                                )
+
+                            with gr.Group(visible=initial_settings.get("use_matchering", True)) as matchering_settings_group:
+                                matchering_passes = gr.Slider(
+                                    label=i18n("matchering_passes"),
+                                    minimum=1,
+                                    maximum=5,
+                                    step=1,
+                                    value=initial_settings.get("matchering_passes", 1),
+                                    info=i18n("matchering_passes_info"),
+                                    interactive=True
+                                )
+
                         with gr.Row():
                             process_btn = gr.Button(i18n("process"), variant="primary")
                             clear_old_output_btn = gr.Button(i18n("reset"), variant="secondary")
@@ -391,6 +408,12 @@ def create_interface():
                             fn=lambda x: gr.update(visible=x),
                             inputs=use_apollo,
                             outputs=apollo_settings_group
+                        )
+
+                        use_matchering.change(
+                            fn=lambda x: gr.update(visible=x),
+                            inputs=use_matchering,
+                            outputs=matchering_settings_group
                         )
 
                         apollo_method.change(
@@ -552,6 +575,24 @@ def create_interface():
                                         interactive=True
                                     )
 
+                            with gr.Row():
+                                auto_use_matchering = gr.Checkbox(
+                                    label=i18n("apply_matchering"),
+                                    value=False,
+                                    info=i18n("matchering_info")
+                                )
+
+                            with gr.Group(visible=True) as auto_matchering_settings_group:
+                                auto_matchering_passes = gr.Slider(
+                                    label=i18n("matchering_passes"),
+                                    minimum=1,
+                                    maximum=5,
+                                    step=1,
+                                    value=1,
+                                    info=i18n("matchering_passes_info"),
+                                    interactive=True
+                                )
+
                         with gr.Group():
                             model_selection_header = gr.Markdown(f"### {i18n('model_selection')}")
                             with gr.Row():
@@ -662,6 +703,12 @@ def create_interface():
                             fn=lambda x: gr.update(visible=x),
                             inputs=auto_use_apollo,
                             outputs=auto_apollo_settings_group
+                        )
+
+                        auto_use_matchering.change(
+                            fn=lambda x: gr.update(visible=x),
+                            inputs=auto_use_matchering,
+                            outputs=auto_matchering_settings_group
                         )
 
                         auto_apollo_method.change(
@@ -808,19 +855,23 @@ def create_interface():
                 "apollo_method": backend_apollo_method,
                 "apollo_normal_model": args[12],
                 "apollo_midside_model": args[13],
-                "model_category": args[14],
+                "use_matchering": args[14],
+                "matchering_passes": args[15],
+                "model_category": args[16],
                 "selected_model": cleaned_model,
                 "auto_ensemble_type": args[7]
             }
             save_config(load_config()["favorites"], settings, load_config()["presets"])
             modified_args = list(args)
             modified_args[1] = cleaned_model
-            modified_args[15] = cleaned_model
+            modified_args[17] = cleaned_model
             return process_audio(*modified_args)
 
         def save_auto_ensemble_settings(*args):
             settings = load_config()["settings"]
             settings["auto_ensemble_type"] = args[7]
+            settings["use_matchering"] = args[14]
+            settings["matchering_passes"] = args[15]
             save_config(load_config()["favorites"], settings, load_config()["presets"])
             # Handle generator output from auto_ensemble_process
             output_audio, status, progress_html = None, i18n("waiting_for_processing"), ensemble_progress_html.value
@@ -835,7 +886,7 @@ def create_interface():
             logging.debug(f"Using English category: {eng_cat}")
             choices = update_model_dropdown(eng_cat, favorites=load_config()["favorites"])["choices"]
             logging.debug(f"Model choices: {choices}")
-            return gr.update(choices=choices), gr.update(choices=choices)   
+            return gr.update(choices=choices), gr.update(choices=choices)
 
         model_category.change(
             fn=update_category_dropdowns,
@@ -879,11 +930,11 @@ def create_interface():
                 "use_tta", "use_demud_phaseremix_inst", "extract_instrumental",
                 "use_apollo", "apollo_chunk_size", "apollo_overlap",
                 "apollo_method", "apollo_normal_model", "apollo_midside_model",
-                "model_category", "selected_model"
+                "use_matchering", "matchering_passes", "model_category", "selected_model"
             ]
             cleaned_args = list(args)
             cleaned_args[1] = clean_model(cleaned_args[1]) if cleaned_args[1] else None
-            cleaned_args[15] = clean_model(cleaned_args[15]) if cleaned_args[15] else None
+            cleaned_args[17] = clean_model(cleaned_args[17]) if cleaned_args[17] else None
             for name, value in zip(input_names, cleaned_args):
                 print(f"UI Input - {name}: {value}")
             return args
@@ -895,7 +946,7 @@ def create_interface():
                 use_tta, use_demud_phaseremix_inst, extract_instrumental,
                 use_apollo, apollo_chunk_size, apollo_overlap,
                 apollo_method, apollo_normal_model, apollo_midside_model,
-                model_category, model_dropdown
+                use_matchering, matchering_passes, model_category, model_dropdown
             ],
             outputs=[
                 vocals_audio, instrumental_audio, phaseremix_audio, drum_audio, karaoke_audio,
@@ -922,6 +973,8 @@ def create_interface():
                 auto_apollo_chunk_size,
                 auto_apollo_overlap,
                 auto_apollo_method,
+                auto_use_matchering,
+                auto_matchering_passes,
                 auto_apollo_midside_model
             ],
             outputs=[auto_output_audio, ensemble_process_status, ensemble_progress_html]
