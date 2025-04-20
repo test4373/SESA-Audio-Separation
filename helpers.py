@@ -37,6 +37,8 @@ from tqdm.auto import tqdm
 import torch.nn as nn
 from model import get_model_config, MODEL_CONFIGS
 from assets.i18n.i18n import I18nAuto
+import matchering as mg
+from scipy.signal import find_peaks
 
 i18n = I18nAuto()
 
@@ -193,6 +195,15 @@ def clean_filename(title):
     """Dosya adından özel karakterleri kaldırır."""
     return re.sub(r'[^\w\-_\. ]', '', title).strip()
 
+def sanitize_filename(filename):
+    base, ext = os.path.splitext(filename)
+    base = re.sub(r'\.+', '_', base)
+    base = re.sub(r'[#<>:"/\\|?*]', '_', base)
+    base = re.sub(r'\s+', '_', base)
+    base = re.sub(r'_+', '_', base)
+    base = base.strip('_')
+    return f"{base}{ext}"
+
 def convert_to_wav(file_path):
     """Ses dosyasını WAV formatına dönüştürür."""
     original_filename = os.path.basename(file_path)
@@ -214,6 +225,118 @@ def convert_to_wav(file_path):
 def generate_random_port():
     """Rastgele bir port numarası oluşturur."""
     return random.randint(1000, 9000)
+
+def save_segment(audio, sr, path):
+    """
+    Save audio segment to a file.
+    
+    Args:
+        audio (np.ndarray): Audio data.
+        sr (int): Sample rate.
+        path (str): Output file path.
+    """
+    sf.write(path, audio, sr)
+
+def run_matchering(reference_path, target_path, output_path, passes=1, bit_depth=24):
+    """
+    Run Matchering to master the target audio using the reference audio.
+    
+    Args:
+        reference_path (str): Path to the reference audio (clear segment).
+        target_path (str): Path to the target audio to be mastered.
+        output_path (str): Path for the mastered output.
+        passes (int): Number of Matchering passes (1-4).
+        bit_depth (int): Output bit depth (16 or 24).
+    
+    Returns:
+        str: Path to the mastered output file.
+    """
+    # Ensure inputs are WAV files
+    ref_audio, sr = librosa.load(reference_path, sr=44100, mono=False)
+    tgt_audio, sr = librosa.load(target_path, sr=44100, mono=False)
+    
+    # Save temporary WAV files
+    temp_ref = os.path.join(tempfile.gettempdir(), "matchering_ref.wav")
+    temp_tgt = os.path.join(tempfile.gettempdir(), "matchering_tgt.wav")
+    save_segment(ref_audio.T if ref_audio.ndim > 1 else ref_audio, sr, temp_ref)
+    save_segment(tgt_audio.T if tgt_audio.ndim > 1 else tgt_audio, sr, temp_tgt)
+    
+    # Configure Matchering with default settings
+    config = mg.Config()  # No parameters, use defaults
+    
+    # Select bit depth for output
+    result_format = mg.pcm24 if bit_depth == 24 else mg.pcm16
+    
+    # Run Matchering for multiple passes
+    current_tgt = temp_tgt
+    for i in range(passes):
+        temp_out = os.path.join(tempfile.gettempdir(), f"matchering_out_pass_{i}.wav")
+        mg.process(
+            reference=temp_ref,
+            target=current_tgt,
+            results=[result_format(temp_out)],  # Bit depth control
+            config=config
+        )
+        current_tgt = temp_out
+    
+    # Move final output to desired path
+    shutil.move(current_tgt, output_path)
+    
+    # Clean up temporary files
+    for temp_file in [temp_ref, temp_tgt] + [os.path.join(tempfile.gettempdir(), f"matchering_out_pass_{i}.wav") for i in range(passes-1)]:
+        if os.path.exists(temp_file):
+            os.remove(temp_file)
+    
+    return output_path     
+
+def find_clear_segment(audio_path, segment_duration=15, sr=44100):
+    """
+    Find the clearest (high-energy, low-noise) segment in an audio file.
+    
+    Args:
+        audio_path (str): Path to the original audio file.
+        segment_duration (float): Duration of the segment to extract (in seconds).
+        sr (int): Sample rate for loading audio.
+    
+    Returns:
+        tuple: (start_time, end_time, segment_audio) of the clearest segment.
+    """
+    # Load audio
+    audio, sr = librosa.load(audio_path, sr=sr, mono=True)
+    
+    # Compute RMS energy in windows
+    window_size = int(5 * sr)  # 5-second windows
+    hop_length = window_size // 2
+    rms = librosa.feature.rms(y=audio, frame_length=window_size, hop_length=hop_length)[0]
+    
+    # Compute spectral flatness for noise detection
+    flatness = librosa.feature.spectral_flatness(y=audio, n_fft=window_size, hop_length=hop_length)[0]
+    
+    # Combine metrics: high RMS and low flatness indicate clear, high-energy segments
+    score = rms / (flatness + 1e-6)  # Avoid division by zero
+    
+    # Find peaks in the score
+    peaks, _ = find_peaks(score, height=np.mean(score), distance=5)
+    if len(peaks) == 0:
+        # Fallback: Use the middle of the track
+        peak_idx = len(score) // 2
+    else:
+        peak_idx = peaks[np.argmax(score[peaks])]
+    
+    # Calculate start and end times
+    start_sample = peak_idx * hop_length
+    end_sample = start_sample + int(segment_duration * sr)
+    
+    # Ensure the segment fits within the audio
+    if end_sample > len(audio):
+        end_sample = len(audio)
+        start_sample = max(0, end_sample - int(segment_duration * sr))
+    
+    start_time = start_sample / sr
+    end_time = end_sample / sr
+    segment_audio = audio[start_sample:end_sample]
+    
+    return start_time, end_time, segment_audio
 
 def update_file_list():
     output_files = glob.glob(os.path.join(OUTPUT_DIR, "*.wav"))
