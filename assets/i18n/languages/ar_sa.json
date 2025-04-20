@@ -269,7 +269,7 @@
   "select_preset": "اختيار إعداد مسبق",
   "add_favorite": "إضافة إلى المفضلة",
   "apollo_midside_model_info": "النموذج المستخدم لمعالجة الوسط/الجانب (اختياري)",
-  "language_changed_message": "تم تغيير اللغة. يرجى إعادة تشغيل الخلية."
+  "language_changed_message": "تم تغيير اللغة. يرجى إعادة تشغيل الخلية.",
   "apply_matchering": "تطبيق Matchering",
   "matchering_info": "تطبيق Matchering لتحسين جودة الصوت وتوازنه",
   "matchering_passes": "تمريرات Matchering",
