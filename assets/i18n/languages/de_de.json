@@ -269,5 +269,12 @@
   "select_preset": "Voreinstellung Auswählen",
   "add_favorite": "Zu Favoriten Hinzufügen",
   "apollo_midside_model_info": "Modell für Mitte/Seite-Verarbeitung (optional)",
-  "language_changed_message": "Sprache geändert. Bitte starte die Zelle neu."
+  "language_changed_message": "Sprache geändert. Bitte starte die Zelle neu.",
+  "apply_matchering": "Matchering anwenden",
+  "matchering_info": "Matchering anwenden, um Audio-Mastering und -Balance zu verbessern",
+  "matchering_passes": "Matchering-Durchgänge",
+  "matchering_passes_info": "Anzahl der Matchering-Iterationen (1-5, höhere Werte verbessern die Qualität, dauern aber länger)",
+  "matchering_processing": "Matchering wird angewendet... ({:.1f}%)",
+  "matchering_completed": "✅ Matchering-Verarbeitung abgeschlossen!",
+  "matchering_error": "❌ Fehler während Matchering: {}"
 }
