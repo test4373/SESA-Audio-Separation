@@ -269,5 +269,12 @@
   "select_preset": "プリセットを選択",
   "add_favorite": "お気に入りに追加",
   "apollo_midside_model_info": "ミッド/サイド処理に使用するモデル (オプション)",
-  "language_changed_message": "言語が変更されました。セルを再起動してください。"
+  "language_changed_message": "言語が変更されました。セルを再起動してください。",
+  "apply_matchering": "Matcheringを適用",
+  "matchering_info": "オーディオのマスタリングとバランスを向上させるためにMatcheringを適用",
+  "matchering_passes": "Matcheringの反復回数",
+  "matchering_passes_info": "Matcheringの反復回数（1-5、高い値は品質を向上させますが時間がかかります）",
+  "matchering_processing": "Matcheringを適用中... ({:.1f}%)",
+  "matchering_completed": "✅ Matchering処理が完了しました！",
+  "matchering_error": "❌ Matchering中にエラーが発生しました：{}"
 }
