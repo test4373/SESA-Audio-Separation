@@ -269,5 +269,12 @@
   "select_preset": "Seleccionar Preajuste",
   "add_favorite": "Añadir a Favoritos",
   "apollo_midside_model_info": "Modelo a usar para procesamiento centro/lateral (opcional)",
-  "language_changed_message": "Idioma cambiado. Por favor, reinicia la celda."
+  "language_changed_message": "Idioma cambiado. Por favor, reinicia la celda.",
+  "apply_matchering": "Aplicar Matchering",
+  "matchering_info": "Aplicar Matchering para mejorar el masterizado y el balance del audio",
+  "matchering_passes": "Pasadas de Matchering",
+  "matchering_passes_info": "Número de iteraciones de Matchering (1-5, valores más altos mejoran la calidad pero toman más tiempo)",
+  "matchering_processing": "Aplicando Matchering... ({:.1f}%)",
+  "matchering_completed": "✅ ¡Procesamiento de Matchering completado!",
+  "matchering_error": "❌ Error durante Matchering: {}"
 }
