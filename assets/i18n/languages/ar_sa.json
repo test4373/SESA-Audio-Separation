@@ -270,4 +270,11 @@
   "add_favorite": "إضافة إلى المفضلة",
   "apollo_midside_model_info": "النموذج المستخدم لمعالجة الوسط/الجانب (اختياري)",
   "language_changed_message": "تم تغيير اللغة. يرجى إعادة تشغيل الخلية."
+  "apply_matchering": "تطبيق Matchering",
+  "matchering_info": "تطبيق Matchering لتحسين جودة الصوت وتوازنه",
+  "matchering_passes": "تمريرات Matchering",
+  "matchering_passes_info": "عدد التكرارات لـ Matchering (1-5، القيم الأعلى تحسن الجودة ولكن تستغرق وقتًا أطول)",
+  "matchering_processing": "جارٍ تطبيق Matchering... ({:.1f}%)",
+  "matchering_completed": "✅ اكتمل معالجة Matchering!",
+  "matchering_error": "❌ حدث خطأ أثناء Matchering: {}"
 }
