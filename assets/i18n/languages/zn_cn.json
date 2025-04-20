@@ -269,5 +269,12 @@
   "select_preset": "选择预设",
   "add_favorite": "添加到收藏",
   "apollo_midside_model_info": "用于中/侧处理的模型（可选）",
-  "language_changed_message": "语言已更改。请重新启动单元。"
+  "language_changed_message": "语言已更改。请重新启动单元。",
+  "apply_matchering": "应用 Matchering",
+  "matchering_info": "应用 Matchering 以提升音频母带处理和平衡",
+  "matchering_passes": "Matchering 迭代次数",
+  "matchering_passes_info": "Matchering 迭代次数（1-5，值越高质量越好，但耗时更长）",
+  "matchering_processing": "正在应用 Matchering... ({:.1f}%)",
+  "matchering_completed": "✅ Matchering 处理完成！",
+  "matchering_error": "❌ Matchering 过程中发生错误：{}"
 }
