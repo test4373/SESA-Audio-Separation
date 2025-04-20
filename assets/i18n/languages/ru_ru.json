@@ -270,4 +270,11 @@
   "add_favorite": "Добавить в избранное",
   "apollo_midside_model_info": "Модель, используемая для обработки середины/сторон (опционально)",
   "language_changed_message": "Язык изменен. Пожалуйста, перезапустите ячейку."
+  "apply_matchering": "Применить Matchering",
+  "matchering_info": "Применить Matchering для улучшения мастеринга и баланса звука",
+  "matchering_passes": "Проходы Matchering",
+  "matchering_passes_info": "Количество итераций Matchering (1-5, более высокие значения улучшают качество, но занимают больше времени)",
+  "matchering_processing": "Применение Matchering... ({:.1f}%)",
+  "matchering_completed": "✅ Обработка Matchering завершена!",
+  "matchering_error": "❌ Ошибка во время Matchering: {}"
 }
