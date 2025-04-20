@@ -269,7 +269,7 @@
   "select_preset": "Выбрать пресет",
   "add_favorite": "Добавить в избранное",
   "apollo_midside_model_info": "Модель, используемая для обработки середины/сторон (опционально)",
-  "language_changed_message": "Язык изменен. Пожалуйста, перезапустите ячейку."
+  "language_changed_message": "Язык изменен. Пожалуйста, перезапустите ячейку.",
   "apply_matchering": "Применить Matchering",
   "matchering_info": "Применить Matchering для улучшения мастеринга и баланса звука",
   "matchering_passes": "Проходы Matchering",
