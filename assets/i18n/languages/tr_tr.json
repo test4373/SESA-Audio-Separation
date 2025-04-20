@@ -291,4 +291,12 @@
   "add_favorite": "favorilere ekle",
   "apollo_midside_model_info": "Orta/yan işleme için kullanılacak model (isteğe bağlı)",
   "language_changed_message": "Dil değiştirildi. Lütfen hücreyi yeniden başlat."
+  "apply_matchering": "Matchering Uygula",
+  "matchering_info": "Ses masteringini ve dengesini iyileştirmek için Matchering uygula",
+  "matchering_passes": "Matchering Geçişleri",
+  "matchering_passes_info": "Matchering yineleme sayısı (1-5, yüksek değerler kaliteyi artırır ancak daha uzun sürer)",
+  "matchering_processing": "Matchering uygulanıyor... ({:.1f}%)",
+  "matchering_completed": "✅ Matchering işlemi tamamlandı!",
+  "matchering_error": "❌ Matchering sırasında hata: {}"
+}
 }
