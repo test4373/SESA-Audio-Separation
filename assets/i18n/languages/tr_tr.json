@@ -290,7 +290,7 @@
   "select_preset": "Ön ayarlar",
   "add_favorite": "favorilere ekle",
   "apollo_midside_model_info": "Orta/yan işleme için kullanılacak model (isteğe bağlı)",
-  "language_changed_message": "Dil değiştirildi. Lütfen hücreyi yeniden başlat."
+  "language_changed_message": "Dil değiştirildi. Lütfen hücreyi yeniden başlat.",
   "apply_matchering": "Matchering Uygula",
   "matchering_info": "Ses masteringini ve dengesini iyileştirmek için Matchering uygula",
   "matchering_passes": "Matchering Geçişleri",
