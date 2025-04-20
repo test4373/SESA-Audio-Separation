@@ -12,7 +12,7 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(current_dir)
 
 from datetime import datetime
-from helpers import INPUT_DIR, OLD_OUTPUT_DIR, ENSEMBLE_DIR, AUTO_ENSEMBLE_TEMP, move_old_files, clear_directory, BASE_DIR, clean_model, extract_model_name_from_checkpoint
+from helpers import INPUT_DIR, OLD_OUTPUT_DIR, ENSEMBLE_DIR, AUTO_ENSEMBLE_TEMP, move_old_files, clear_directory, BASE_DIR, clean_model, extract_model_name_from_checkpoint, sanitize_filename, find_clear_segment, save_segment, run_matchering
 from model import get_model_config
 import torch
 import yaml
@@ -33,6 +33,7 @@ from google.oauth2.credentials import Credentials
 import tempfile
 from urllib.parse import urlparse, quote
 from google.colab import drive
+import matchering as mg
 
 import warnings
 warnings.filterwarnings("ignore")
@@ -42,15 +43,6 @@ INFERENCE_PATH = os.path.join(BASE_DIR, "inference.py")
 ENSEMBLE_PATH = os.path.join(BASE_DIR, "ensemble.py")
 OUTPUT_DIR = os.path.join(BASE_DIR, "output")
 AUTO_ENSEMBLE_OUTPUT = os.path.join(BASE_DIR, "ensemble_output")
-
-def sanitize_filename(filename):
-    base, ext = os.path.splitext(filename)
-    base = re.sub(r'\.+', '_', base)
-    base = re.sub(r'[#<>:"/\\|?*]', '_', base)
-    base = re.sub(r'\s+', '_', base)
-    base = re.sub(r'_+', '_', base)
-    base = base.strip('_')
-    return f"{base}{ext}"
 
 def copy_ensemble_to_drive():
     try:
@@ -493,7 +485,28 @@ def run_command_and_process_files(
         import traceback
         traceback.print_exc()
         return (None,) * 14
-def process_audio(input_audio_file, model, chunk_size, overlap, export_format, use_tta, demud_phaseremix_inst, extract_instrumental, use_apollo, apollo_chunk_size, apollo_overlap, apollo_method, apollo_normal_model, apollo_midside_model, progress=gr.Progress(track_tqdm=True), *args, **kwargs):
+
+def process_audio(
+    input_audio_file,
+    model,
+    chunk_size,
+    overlap,
+    export_format,
+    use_tta,
+    demud_phaseremix_inst,
+    extract_instrumental,
+    use_apollo,
+    apollo_chunk_size,
+    apollo_overlap,
+    apollo_method,
+    apollo_normal_model,
+    apollo_midside_model,
+    use_matchering=True,
+    matchering_passes=1,
+    progress=gr.Progress(track_tqdm=True),
+    *args,
+    **kwargs
+):
     try:
         if input_audio_file is not None:
             audio_path = input_audio_file.name
@@ -581,6 +594,43 @@ def process_audio(input_audio_file, model, chunk_size, overlap, export_format, u
         if outputs is None or all(output is None for output in outputs):
             raise ValueError("run_command_and_process_files returned None or all None outputs")
 
+        # Apply Matchering if enabled
+        if use_matchering:
+            # Update progress for Matchering
+            if progress is not None and callable(getattr(progress, '__call__', None)):
+                progress(90, desc=i18n("applying_matchering"))
+
+            # Find clear segment from original audio
+            segment_start, segment_end, segment_audio = find_clear_segment(audio_path)
+            segment_path = os.path.join(tempfile.gettempdir(), "matchering_segment.wav")
+            save_segment(segment_audio, 44100, segment_path)
+
+            # Process each output with Matchering
+            mastered_outputs = []
+            for output in outputs:
+                if output and os.path.exists(output):
+                    output_base = sanitize_filename(os.path.splitext(os.path.basename(output))[0])
+                    mastered_path = os.path.join(OUTPUT_DIR, f"{output_base}_mastered.wav")
+                    mastered_output = run_matchering(
+                        reference_path=segment_path,
+                        target_path=output,
+                        output_path=mastered_path,
+                        passes=matchering_passes,
+                        bit_depth=24
+                    )
+                    mastered_outputs.append(mastered_path)
+                else:
+                    mastered_outputs.append(output)
+
+            # Clean up segment file
+            if os.path.exists(segment_path):
+                os.remove(segment_path)
+
+            outputs = tuple(mastered_outputs)
+
+        if progress is not None and callable(getattr(progress, '__call__', None)):
+            progress(100, desc=i18n("processing_complete"))
+
         return (
             outputs[0], outputs[1], outputs[2], outputs[3], outputs[4], outputs[5], outputs[6],
             outputs[7], outputs[8], outputs[9], outputs[10], outputs[11], outputs[12], outputs[13],
@@ -664,6 +714,8 @@ def auto_ensemble_process(
     auto_apollo_chunk_size=19,
     auto_apollo_overlap=2,
     auto_apollo_method="normal_method",
+    auto_use_matchering=True,
+    auto_matchering_passes=1,
     progress=gr.Progress(track_tqdm=True),
     *args,
     **kwargs
@@ -1002,6 +1054,33 @@ def auto_ensemble_process(
             return
 
         print(i18n("memory_usage_after_ensemble").format(psutil.virtual_memory().percent))
+
+        # Apply Matchering to the ensemble output
+        if auto_use_matchering and os.path.exists(output_path):
+            yield None, i18n("applying_matchering"), update_progress_html(
+                i18n("applying_matchering_progress_label"), 98
+            )
+
+            # Find clear segment
+            segment_start, segment_end, segment_audio = find_clear_segment(audio_path)
+            segment_path = os.path.join(tempfile.gettempdir(), "matchering_segment.wav")
+            save_segment(segment_audio, 44100, segment_path)
+
+            # Master the ensemble output
+            mastered_output_path = os.path.join(AUTO_ENSEMBLE_OUTPUT, f"ensemble_{timestamp}_mastered.wav")
+            run_matchering(
+                reference_path=segment_path,
+                target_path=output_path,
+                output_path=mastered_output_path,
+                passes=auto_matchering_passes,
+                bit_depth=24
+            )
+
+            # Clean up segment file
+            if os.path.exists(segment_path):
+                os.remove(segment_path)
+
+            output_path = mastered_output_path
 
         yield None, i18n("finalizing_ensemble_output"), update_progress_html(
             i18n("finalizing_ensemble_output_progress_label"), 98
