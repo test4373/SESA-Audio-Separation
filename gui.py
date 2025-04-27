@@ -11,7 +11,7 @@ import random
 from helpers import update_model_dropdown, handle_file_upload, clear_old_output, save_uploaded_file, update_file_list, clean_model
 from download import download_callback
 from model import get_model_config, MODEL_CONFIGS
-from processing import process_audio, auto_ensemble_process, ensemble_audio_fn, refresh_auto_output, copy_ensemble_to_drive, copy_to_drive
+from processing import process_audio, auto_ensemble_process, ensemble_audio_fn, refresh_auto_output
 from assets.i18n.i18n import I18nAuto
 from config_manager import load_config, save_config, update_favorites, save_preset, delete_preset
 import logging
@@ -473,13 +473,6 @@ def create_interface():
                             interactive=False,
                             placeholder=i18n("waiting_for_processing"),
                             visible=False
-                        )
-                        copy_to_drive_btn = gr.Button(i18n("copy_to_drive"), variant="secondary")
-                        copy_status = gr.Textbox(
-                            label=i18n("copy_status"),
-                            interactive=False,
-                            placeholder=i18n("files_will_be_copied"),
-                            visible=True
                         )
                         processing_tip = gr.Markdown(i18n("processing_tip"))
 
@@ -990,18 +983,6 @@ def create_interface():
             fn=refresh_auto_output,
             inputs=[],
             outputs=[auto_output_audio, ensemble_process_status]
-        )
-
-        ensemble_copy_to_drive_btn.click(
-            fn=copy_ensemble_to_drive,
-            inputs=[],
-            outputs=[ensemble_copy_status]
-        )
-
-        copy_to_drive_btn.click(
-            fn=copy_to_drive,
-            inputs=[],
-            outputs=[copy_status]
         )
 
         refresh_btn.click(fn=update_file_list, outputs=file_dropdown)
