@@ -32,7 +32,11 @@ from tqdm import tqdm
 from google.oauth2.credentials import Credentials
 import tempfile
 from urllib.parse import urlparse, quote
-from google.colab import drive
+try:
+    from google.colab import drive
+    IS_COLAB = True
+except ImportError:
+    IS_COLAB = False
 import matchering as mg
 
 import warnings
@@ -41,69 +45,35 @@ warnings.filterwarnings("ignore")
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 INFERENCE_PATH = os.path.join(BASE_DIR, "inference.py")
 ENSEMBLE_PATH = os.path.join(BASE_DIR, "ensemble.py")
-OUTPUT_DIR = os.path.join(BASE_DIR, "output")
+if IS_COLAB:
+    OUTPUT_DIR = '/content/drive/MyDrive/!output_file'  # Google Drive, appears at the top
+else:
+    OUTPUT_DIR = os.path.join(BASE_DIR, "output")
 AUTO_ENSEMBLE_OUTPUT = os.path.join(BASE_DIR, "ensemble_output")
 
-def copy_ensemble_to_drive():
-    try:
-        if not os.path.exists('/content/drive'):
-            drive.mount('/content/drive')
-            status = i18n("drive_mounted_copying_ensemble")
-        else:
-            status = i18n("drive_already_mounted_copying_ensemble")
-
-        source_dir = AUTO_ENSEMBLE_OUTPUT
-        output_files = glob.glob(os.path.join(source_dir, "*.wav"))
-        if not output_files:
-            return i18n("no_ensemble_output_files_found")
-
-        latest_file = max(output_files, key=os.path.getctime)
-        filename = os.path.basename(latest_file)
-
-        dest_dir = "/content/drive/MyDrive/SESA_Ensemble_Output"
-        os.makedirs(dest_dir, exist_ok=True)
-        dest_path = os.path.join(dest_dir, filename)
-
-        shutil.copy2(latest_file, dest_path)
-        return i18n("ensemble_output_copied").format(dest_path)
-    except Exception as e:
-        return i18n("error_copying_ensemble_output").format(str(e))
-
-def copy_to_drive():
-    try:
-        if not os.path.exists('/content/drive'):
-            drive.mount('/content/drive')
-            status = i18n("drive_mounted_copying_files")
-        else:
-            status = i18n("drive_already_mounted_copying_files")
-
-        source_dir = OUTPUT_DIR
-        dest_dir = "/content/drive/MyDrive/SESA_Output"
-        os.makedirs(dest_dir, exist_ok=True)
-
-        for filename in os.listdir(source_dir):
-            src_path = os.path.join(source_dir, filename)
-            dest_path = os.path.join(dest_dir, filename)
-            if os.path.isfile(src_path):
-                shutil.copy2(src_path, dest_path)
-
-        return i18n("files_copied_to_drive").format(dest_dir)
-    except Exception as e:
-        return i18n("error_copying_files").format(str(e))
+def setup_directories():
+    """Create necessary directories and check Google Drive access."""
+    if IS_COLAB:
+        if not os.path.exists('/content/drive/MyDrive'):
+            raise RuntimeError("Google Drive not mounted. Please run 'from google.colab import drive; drive.mount('/content/drive', force_remount=True)' first.")
+        os.makedirs(OUTPUT_DIR, exist_ok=True)
+    os.makedirs(INPUT_DIR, exist_ok=True)
+    os.makedirs(OLD_OUTPUT_DIR, exist_ok=True)
+    os.makedirs(AUTO_ENSEMBLE_OUTPUT, exist_ok=True)
 
 def refresh_auto_output():
     try:
         output_files = glob.glob(os.path.join(AUTO_ENSEMBLE_OUTPUT, "*.wav"))
         if not output_files:
-            return None, i18n("no_output_files_found")
+            return None, "No output files found"
         
         latest_file = max(output_files, key=os.path.getctime)
-        return latest_file, i18n("output_refreshed_successfully")
+        return latest_file, "Output refreshed successfully"
     except Exception as e:
-        return None, i18n("error_refreshing_output").format(str(e))
+        return None, f"Error refreshing output: {str(e)}"
 
 def clamp_percentage(value):
-    """Helper function to clamp percentage values to the 0-100 range."""
+    """Clamp percentage values to the 0-100 range."""
     try:
         return min(max(float(value), 0), 100)
     except (ValueError, TypeError):
@@ -111,10 +81,10 @@ def clamp_percentage(value):
         return 0
 
 def update_progress_html(progress_label, progress_percent):
-    """Helper function to generate progress HTML with clamped percentage."""
+    """Generate progress HTML."""
     progress_percent = clamp_percentage(progress_percent)
     if progress_percent > 100:
-        print(f"Warning: Progress percent {progress_percent} exceeds 100, clamping to 100")
+        print(f"Warning: Progress percentage {progress_percent} exceeds 100, clamping to 100")
     return f"""
     <div id="custom-progress" style="margin-top: 10px;">
         <div style="font-size: 1rem; color: #C0C0C0; margin-bottom: 5px;" id="progress-label">{progress_label}</div>
@@ -154,43 +124,25 @@ def run_command_and_process_files(
 ):
     """
     Run inference.py with specified parameters and process output files.
-    Args:
-        model_type (str): Type of model (e.g., 'mel_band_roformer').
-        config_path (str): Path to model config file.
-        start_check_point (str): Path to model checkpoint.
-        INPUT_DIR (str): Input folder path.
-        OUTPUT_DIR (str): Output folder path.
-        extract_instrumental (bool): Whether to extract instrumental.
-        use_tta (bool): Whether to use test-time augmentation.
-        demud_phaseremix_inst (bool): Whether to use demud phaseremix.
-        progress: Gradio progress object or None.
-        use_apollo (bool): Whether to use Apollo enhancement.
-        apollo_normal_model (str): Apollo model for normal method.
-        inference_chunk_size (int): Chunk size for inference.py (logged, not passed to command).
-        inference_overlap (int): Overlap percentage for inference.py (logged, not passed to command).
-        apollo_chunk_size (int): Chunk size for Apollo processing.
-        apollo_overlap (int): Overlap percentage for Apollo processing.
-        apollo_method (str): Apollo processing method.
-        apollo_midside_model (str): Apollo model for mid-side method.
-        output_format (str): Output audio format.
-    Returns:
-        tuple: Paths to output audio files (vocals, instrumental, etc.) or None.
     """
     try:
+        # Create directories and check Google Drive access
+        setup_directories()
+
         print(f"run_command_and_process_files: model_type={model_type}, config_path={config_path}, start_check_point={start_check_point}, inference_chunk_size={inference_chunk_size}, inference_overlap={inference_overlap}, apollo_chunk_size={apollo_chunk_size}, apollo_overlap={apollo_overlap}, progress_type={type(progress)}")
         if not config_path:
-            raise ValueError(f"Configuration path is empty for model_type: {model_type}")
+            raise ValueError(f"Configuration path is empty: model_type: {model_type}")
         if not os.path.exists(config_path):
             raise FileNotFoundError(f"Configuration file not found: {config_path}")
         if not start_check_point or not os.path.exists(start_check_point):
             raise FileNotFoundError(f"Checkpoint file not found: {start_check_point}")
 
-        # Validate inference parameters (for logging only)
+        # Validate inference parameters
         try:
             inference_chunk_size = int(inference_chunk_size)
             inference_overlap = int(inference_overlap)
         except (TypeError, ValueError) as e:
-            print(f"Invalid inference_chunk_size or inference_overlap: {e}. Defaulting to inference_chunk_size=352800, inference_overlap=2")
+            print(f"Invalid inference_chunk_size or inference_overlap: {e}. Defaulting to: inference_chunk_size=352800, inference_overlap=2")
             inference_chunk_size = 352800
             inference_overlap = 2
 
@@ -199,7 +151,7 @@ def run_command_and_process_files(
             apollo_chunk_size = int(apollo_chunk_size)
             apollo_overlap = int(apollo_overlap)
         except (TypeError, ValueError) as e:
-            print(f"Invalid apollo_chunk_size or apollo_overlap: {e}. Defaulting to apollo_chunk_size=19, apollo_overlap=2")
+            print(f"Invalid apollo_chunk_size or apollo_overlap: {e}. Defaulting to: apollo_chunk_size=19, apollo_overlap=2")
             apollo_chunk_size = 19
             apollo_overlap = 2
 
@@ -209,7 +161,10 @@ def run_command_and_process_files(
             "--config_path", config_path,
             "--start_check_point", start_check_point,
             "--input_folder", INPUT_DIR,
-            "--store_dir", OUTPUT_DIR
+            "--store_dir", OUTPUT_DIR,
+            "--chunk_size", str(inference_chunk_size),
+            "--overlap", str(inference_overlap),
+            "--export_format", f"{output_format} FLOAT"
         ]
         if extract_instrumental:
             cmd_parts.append("--extract_instrumental")
@@ -232,17 +187,17 @@ def run_command_and_process_files(
         if process.stderr:
             print(f"Subprocess stderr: {process.stderr}")
 
-        # Initialize progress for separation phase (0-80%) if progress is callable
+        # Progress update (separation phase, 0-80%)
         if progress is not None and callable(getattr(progress, '__call__', None)):
-            progress(0, desc=i18n("starting_audio_separation"), total=100)
+            progress(0, desc="Starting audio separation", total=100)
         else:
-            print("Progress not callable or None, skipping progress update")
+            print("Progress is not callable or None, skipping progress update")
 
-        # Check if output files were generated
+        # Check if output files were created
         filename_model = extract_model_name_from_checkpoint(start_check_point)
         output_files = os.listdir(OUTPUT_DIR)
         if not output_files:
-            raise FileNotFoundError("No output files generated in OUTPUT_DIR")
+            raise FileNotFoundError("No output files created in OUTPUT_DIR")
 
         def rename_files_with_model(folder, filename_model):
             for filename in sorted(os.listdir(folder)):
@@ -262,13 +217,13 @@ def run_command_and_process_files(
                 try:
                     os.rename(file_path, new_file_path)
                 except Exception as e:
-                    print(f"Failed to rename {file_path} to {new_file_path}: {str(e)}")
+                    print(f"Could not rename {file_path} to {new_file_path}: {str(e)}")
 
         rename_files_with_model(OUTPUT_DIR, filename_model)
 
         output_files = os.listdir(OUTPUT_DIR)
         if not output_files:
-            raise FileNotFoundError("No output files generated after renaming")
+            raise FileNotFoundError("No output files in OUTPUT_DIR after renaming")
 
         def find_file(keyword):
             matching_files = [
@@ -299,7 +254,7 @@ def run_command_and_process_files(
             else:
                 normalized_outputs.append(output_file)
 
-        # Only process Apollo if use_apollo is True
+        # Apollo processing only if use_apollo is True
         if use_apollo:
             apollo_script = "/content/Apollo/inference.py"
 
@@ -335,7 +290,7 @@ def run_command_and_process_files(
             if not os.path.exists(ckpt):
                 raise FileNotFoundError(f"Apollo checkpoint file not found: {ckpt}")
             if not os.path.exists(config):
-                raise FileNotFoundError(f"Apollo config file not found: {config}")
+                raise FileNotFoundError(f"Apollo configuration file not found: {config}")
 
             enhanced_files = []
             total_files = len([f for f in normalized_outputs if f and os.path.exists(f)])
@@ -348,13 +303,13 @@ def run_command_and_process_files(
                     enhanced_output = os.path.join(OUTPUT_DIR, f"{original_file_name}{enhancement_suffix}.{output_format}")
 
                     try:
-                        # Update progress for Apollo processing
+                        # Progress update for Apollo processing
                         if progress is not None and callable(getattr(progress, '__call__', None)):
                             current_progress = 80 + (idx * progress_per_file)
                             current_progress = clamp_percentage(current_progress)
                             progress(current_progress, desc=f"Enhancing with Apollo... ({idx+1}/{total_files})")
                         else:
-                            print(f"Progress not callable or None, skipping Apollo progress update for file {idx+1}/{total_files}")
+                            print(f"Progress is not callable or None, skipping Apollo progress update: file {idx+1}/{total_files}")
 
                         if apollo_method == "mid_side_method":
                             audio, sr = librosa.load(output_file, mono=False, sr=None)
@@ -423,7 +378,7 @@ def run_command_and_process_files(
                                     if os.path.exists(temp_file):
                                         os.remove(temp_file)
                                 except Exception as e:
-                                    print(f"Failed to remove temporary file {temp_file}: {str(e)}")
+                                    print(f"Could not delete temporary file {temp_file}: {str(e)}")
 
                             enhanced_files.append(enhanced_output)
                         else:
@@ -443,7 +398,7 @@ def run_command_and_process_files(
                                 text=True
                             )
                             if apollo_process.returncode != 0:
-                                print(f"Apollo failed for {output_file}: {apollo_process.stderr}")
+                                print(f"Apollo processing failed: {output_file}: {apollo_process.stderr}")
                                 enhanced_files.append(output_file)
                                 continue
 
@@ -454,14 +409,14 @@ def run_command_and_process_files(
 
                             enhanced_files.append(enhanced_output)
 
-                        # Update progress after processing each file
+                        # Progress update after each file
                         if progress is not None and callable(getattr(progress, '__call__', None)):
                             current_progress = 80 + ((idx + 1) * progress_per_file)
                             current_progress = clamp_percentage(current_progress)
                             progress(current_progress, desc=f"Enhancing with Apollo... ({idx+1}/{total_files})")
 
                     except Exception as e:
-                        print(f"Error during Apollo processing for {output_file}: {str(e)}")
+                        print(f"Error during Apollo processing: {output_file}: {str(e)}")
                         enhanced_files.append(output_file)
                         continue
                 else:
@@ -469,19 +424,19 @@ def run_command_and_process_files(
 
             # Final progress update
             if progress is not None and callable(getattr(progress, '__call__', None)):
-                progress(100, desc=i18n("apollo_enhancement_complete"))
+                progress(100, desc="Apollo enhancement complete")
             return tuple(enhanced_files)
 
-        # If use_apollo is False, return the normalized outputs without Apollo processing
+        # If use_apollo is False, return normalized outputs without Apollo processing
         if progress is not None and callable(getattr(progress, '__call__', None)):
-            progress(100, desc=i18n("separation_complete"))
+            progress(100, desc="Separation complete")
         return tuple(normalized_outputs)
 
     except subprocess.CalledProcessError as e:
-        print(f"Subprocess failed with code {e.returncode}: {e.stderr}")
+        print(f"Subprocess failed, code: {e.returncode}: {e.stderr}")
         return (None,) * 14
     except Exception as e:
-        print(f"Error in run_command_and_process_files: {str(e)}")
+        print(f"run_command_and_process_files error: {str(e)}")
         import traceback
         traceback.print_exc()
         return (None,) * 14
@@ -508,13 +463,16 @@ def process_audio(
     **kwargs
 ):
     try:
+        # Check Google Drive connection
+        setup_directories()
+
         if input_audio_file is not None:
-            audio_path = input_audio_file.name
+            audio_path = input_audio_file.name if hasattr(input_audio_file, 'name') else input_audio_file
         else:
             return (
                 None, None, None, None, None, None, None, None, None, None, None, None, None, None,
-                i18n("no_audio_file_error"),
-                update_progress_html(i18n("no_input_progress_label"), 0)
+                "No audio file provided",
+                update_progress_html("No input provided", 0)
             )
 
         os.makedirs(OUTPUT_DIR, exist_ok=True)
@@ -522,51 +480,57 @@ def process_audio(
         move_old_files(OUTPUT_DIR)
 
         print(f"process_audio: model parameter received: {model}")
-        # Clean the model name to remove ⭐ and other unwanted characters
+        # Clean model name, remove ⭐ and other unwanted characters
         clean_model_name = clean_model(model) if not model.startswith("/") else extract_model_name_from_checkpoint(model)
-        print(f"Processing audio from: {audio_path} using model: {clean_model_name}")
+        print(f"Processing audio: {audio_path}, model: {clean_model_name}")
 
         print(f"Raw UI inputs - chunk_size: {chunk_size}, overlap: {overlap}, apollo_chunk_size: {apollo_chunk_size}, apollo_overlap: {apollo_overlap}, apollo_method: {apollo_method}")
 
-        # Validate inference parameters (for logging only)
+        # Validate inference parameters
         try:
             inference_chunk_size = int(chunk_size)
         except (TypeError, ValueError):
-            print(f"Invalid chunk_size: {chunk_size}. Defaulting to 352800.")
+            print(f"Invalid chunk_size: {chunk_size}. Defaulting to: 352800.")
             inference_chunk_size = 352800
 
         try:
             inference_overlap = int(overlap)
         except (TypeError, ValueError):
-            print(f"Invalid overlap: {overlap}. Defaulting to 2.")
+            print(f"Invalid overlap: {overlap}. Defaulting to: 2.")
             inference_overlap = 2
 
         # Validate Apollo parameters
         try:
             apollo_chunk_size = int(apollo_chunk_size)
         except (TypeError, ValueError):
-            print(f"Invalid apollo_chunk_size: {apollo_chunk_size}. Defaulting to 19.")
+            print(f"Invalid apollo_chunk_size: {apollo_chunk_size}. Defaulting to: 19.")
             apollo_chunk_size = 19
 
         try:
             apollo_overlap = int(apollo_overlap)
         except (TypeError, ValueError):
-            print(f"Invalid apollo_overlap: {apollo_overlap}. Defaulting to 2.")
+            print(f"Invalid apollo_overlap: {apollo_overlap}. Defaulting to: 2.")
             apollo_overlap = 2
 
         # Map apollo_method to backend values
-        if apollo_method in [i18n("mid_side_method"), "2", 2, "mid_side_method"]:
+        if apollo_method in ["Mid-side method", "2", 2, "mid_side_method"]:
             apollo_method = "mid_side_method"
-        elif apollo_method in [i18n("normal_method"), "1", 1, "normal_method"]:
+        elif apollo_method in ["Normal method", "1", 1, "normal_method"]:
             apollo_method = "normal_method"
         else:
-            print(f"Invalid apollo_method: {apollo_method}. Defaulting to normal_method.")
+            print(f"Invalid apollo_method: {apollo_method}. Defaulting to: normal_method.")
             apollo_method = "normal_method"
-        print(f"Interpreted apollo_method: {apollo_method}")
+        print(f"Parsed apollo_method: {apollo_method}")
 
         print(f"Corrected values - inference_chunk_size: {inference_chunk_size}, inference_overlap: {inference_overlap}, apollo_chunk_size: {apollo_chunk_size}, apollo_overlap: {apollo_overlap}")
 
-        # Get model config using cleaned model name
+        # Copy input file to INPUT_DIR
+        input_filename = os.path.basename(audio_path)
+        dest_path = os.path.join(INPUT_DIR, input_filename)
+        shutil.copy(audio_path, dest_path)
+        print(f"Input file copied: {dest_path}")
+
+        # Get model configuration with cleaned model name
         model_type, config_path, start_check_point = get_model_config(clean_model_name, inference_chunk_size, inference_overlap)
         print(f"Model configuration: model_type={model_type}, config_path={config_path}, start_check_point={start_check_point}")
 
@@ -594,13 +558,13 @@ def process_audio(
         if outputs is None or all(output is None for output in outputs):
             raise ValueError("run_command_and_process_files returned None or all None outputs")
 
-        # Apply Matchering if enabled
+        # Apply Matchering (if enabled)
         if use_matchering:
-            # Update progress for Matchering
+            # Progress update for Matchering
             if progress is not None and callable(getattr(progress, '__call__', None)):
-                progress(90, desc=i18n("applying_matchering"))
+                progress(90, desc="Applying Matchering")
 
-            # Find clear segment from original audio
+            # Find clean segment from original audio
             segment_start, segment_end, segment_audio = find_clear_segment(audio_path)
             segment_path = os.path.join(tempfile.gettempdir(), "matchering_segment.wav")
             save_segment(segment_audio, 44100, segment_path)
@@ -629,33 +593,33 @@ def process_audio(
             outputs = tuple(mastered_outputs)
 
         if progress is not None and callable(getattr(progress, '__call__', None)):
-            progress(100, desc=i18n("processing_complete"))
+            progress(100, desc="Processing complete")
 
         return (
             outputs[0], outputs[1], outputs[2], outputs[3], outputs[4], outputs[5], outputs[6],
             outputs[7], outputs[8], outputs[9], outputs[10], outputs[11], outputs[12], outputs[13],
-            i18n("audio_processing_completed"),
-            update_progress_html(i18n("audio_processing_completed_progress_label"), 100)
+            "Audio processing completed",
+            update_progress_html("Audio processing completed", 100)
         )
 
     except Exception as e:
-        print(f"Error in process_audio: {str(e)}")
+        print(f"process_audio error: {str(e)}")
         import traceback
         traceback.print_exc()
         return (
             None, None, None, None, None, None, None, None, None, None, None, None, None, None,
-            i18n("error_occurred").format(str(e)),
-            update_progress_html(i18n("error_occurred_progress_label"), 0)
+            f"Error occurred: {str(e)}",
+            update_progress_html("Error occurred", 0)
         )
 
 def ensemble_audio_fn(files, method, weights, progress=gr.Progress()):
     try:
         if len(files) < 2:
-            return None, i18n("minimum_files_required")
+            return None, "Minimum two files required"
         
         valid_files = [f for f in files if os.path.exists(f)]
         if len(valid_files) < 2:
-            return None, i18n("valid_files_not_found")
+            return None, "Valid files not found"
         
         output_dir = os.path.join(BASE_DIR, "ensembles")
         os.makedirs(output_dir, exist_ok=True)
@@ -673,7 +637,7 @@ def ensemble_audio_fn(files, method, weights, progress=gr.Progress()):
             weights_list = [str(w) for w in map(float, weights.split(','))]
             ensemble_args += ["--weights", *weights_list]
         
-        progress(0, desc=i18n("starting_ensemble_process"), total=100)
+        progress(0, desc="Starting ensemble process", total=100)
         result = subprocess.run(
             ["python", "ensemble.py"] + ensemble_args,
             capture_output=True,
@@ -681,23 +645,23 @@ def ensemble_audio_fn(files, method, weights, progress=gr.Progress()):
         )
         
         start_time = time.time()
-        total_estimated_time = 10.0  # Adjust based on actual ensemble time
+        total_estimated_time = 10.0  # Adjust based on actual ensemble duration
         elapsed_time = 0
         while elapsed_time < total_estimated_time:
             elapsed_time = time.time() - start_time
             progress_value = (elapsed_time / total_estimated_time) * 100
             progress_value = clamp_percentage(progress_value)
-            progress(progress_value, desc=i18n("ensembling_progress").format(progress_value))
+            progress(progress_value, desc=f"Ensembling progress: {progress_value}%")
             time.sleep(0.1)
         
-        progress(100, desc=i18n("finalizing_ensemble_output"))
-        log = i18n("success_log").format(result.stdout) if not result.stderr else i18n("error_log").format(result.stderr)
+        progress(100, desc="Finalizing ensemble output")
+        log = f"Success: {result.stdout}" if not result.stderr else f"Error: {result.stderr}"
         return output_path, log
 
     except Exception as e:
-        return None, i18n("critical_error").format(str(e))
+        return None, f"Critical error: {str(e)}"
     finally:
-        progress(100, desc=i18n("ensemble_process_completed"))
+        progress(100, desc="Ensemble process completed")
 
 def auto_ensemble_process(
     auto_input_audio_file,
@@ -721,23 +685,32 @@ def auto_ensemble_process(
     **kwargs
 ):
     try:
+        # Check Google Drive connection
+        setup_directories()
+
         if not selected_models or len(selected_models) < 1:
-            yield None, i18n("no_models_selected"), update_progress_html(i18n("error_occurred_progress_label"), 0)
+            yield None, "No models selected", update_progress_html("Error occurred", 0)
 
         if auto_input_audio_file is None:
             existing_files = os.listdir(INPUT_DIR)
             if not existing_files:
-                yield None, i18n("no_input_audio_provided"), update_progress_html(i18n("error_occurred_progress_label"), 0)
+                yield None, "No input audio provided", update_progress_html("Error occurred", 0)
             audio_path = os.path.join(INPUT_DIR, existing_files[0])
         else:
             audio_path = auto_input_audio_file.name if hasattr(auto_input_audio_file, 'name') else auto_input_audio_file
+
+        # Copy input file to INPUT_DIR
+        input_filename = os.path.basename(audio_path)
+        dest_path = os.path.join(INPUT_DIR, input_filename)
+        shutil.copy(audio_path, dest_path)
+        print(f"Input file copied: {dest_path}")
 
         print(f"Raw UI inputs - auto_apollo_chunk_size: {auto_apollo_chunk_size}, auto_apollo_overlap: {auto_apollo_overlap}")
         if auto_apollo_method == "2" or auto_apollo_method == 2:
             auto_apollo_method = "mid_side_method"
         elif auto_apollo_method == "1" or auto_apollo_method == 1:
             auto_apollo_method = "normal_method"
-        print(f"Interpreted auto_apollo_method: {auto_apollo_method}")
+        print(f"Parsed auto_apollo_method: {auto_apollo_method}")
 
         corrected_auto_chunk_size = int(auto_apollo_chunk_size)
         corrected_auto_overlap = int(auto_apollo_overlap)
@@ -755,20 +728,20 @@ def auto_ensemble_process(
         model_progress_per_step = model_progress_range / total_models if total_models > 0 else 0
 
         for i, model in enumerate(selected_models):
-            clean_model_name = clean_model(model)  # Use clean_model to remove ⭐
+            clean_model_name = clean_model(model)  # Remove ⭐
             print(f"Processing model {i+1}/{total_models}: Original={model}, Cleaned={clean_model_name}")
             model_output_dir = os.path.join(auto_ensemble_temp, clean_model_name)
             os.makedirs(model_output_dir, exist_ok=True)
 
             current_progress = i * model_progress_per_step
             current_progress = clamp_percentage(current_progress)
-            yield None, i18n("loading_model").format(i+1, total_models, clean_model_name), update_progress_html(
-                i18n("loading_model_progress_label").format(i+1, total_models, clean_model_name, current_progress),
+            yield None, f"Loading model {i+1}/{total_models}: {clean_model_name}", update_progress_html(
+                f"Loading model {i+1}/{total_models}: {clean_model_name} ({current_progress}%)",
                 current_progress
             )
 
             model_type, config_path, start_check_point = get_model_config(clean_model_name, auto_chunk_size, auto_overlap)
-            print(f"Model config: model_type={model_type}, config_path={config_path}, start_check_point={start_check_point}")
+            print(f"Model configuration: model_type={model_type}, config_path={config_path}, start_check_point={start_check_point}")
 
             cmd = [
                 "python", INFERENCE_PATH,
@@ -777,13 +750,16 @@ def auto_ensemble_process(
                 "--start_check_point", start_check_point,
                 "--input_folder", INPUT_DIR,
                 "--store_dir", model_output_dir,
+                "--chunk_size", str(auto_chunk_size),
+                "--overlap", str(auto_overlap),
+                "--export_format", f"{export_format.split()[0].lower()} FLOAT"
             ]
             if auto_use_tta:
                 cmd.append("--use_tta")
             if auto_extract_instrumental:
                 cmd.append("--extract_instrumental")
 
-            print(i18n("running_command").format(' '.join(cmd)))
+            print(f"Running command: {' '.join(cmd)}")
             process = subprocess.Popen(
                 cmd,
                 stdout=subprocess.PIPE,
@@ -802,12 +778,12 @@ def auto_ensemble_process(
                         model_percentage = (percentage / 100) * model_progress_per_step
                         current_progress = (i * model_progress_per_step) + model_percentage
                         current_progress = clamp_percentage(current_progress)
-                        yield None, i18n("loading_model").format(i+1, total_models, clean_model_name), update_progress_html(
-                            i18n("loading_model_progress_label").format(i+1, total_models, clean_model_name, current_progress),
+                        yield None, f"Loading model {i+1}/{total_models}: {clean_model_name}", update_progress_html(
+                            f"Loading model {i+1}/{total_models}: {clean_model_name} ({current_progress}%)",
                             current_progress
                         )
                     except (AttributeError, ValueError) as e:
-                        print(i18n("progress_parsing_error").format(e))
+                        print(f"Progress parsing error: {e}")
 
             for line in process.stderr:
                 stderr_output += line
@@ -815,9 +791,9 @@ def auto_ensemble_process(
 
             process.wait()
             if process.returncode != 0:
-                print(i18n("error").format(stderr_output))
-                yield None, i18n("model_failed").format(clean_model_name, stderr_output), update_progress_html(
-                    i18n("error_occurred_progress_label"), 0
+                print(f"Error: {stderr_output}")
+                yield None, f"Model failed: {clean_model_name}: {stderr_output}", update_progress_html(
+                    "Error occurred", 0
                 )
                 return
 
@@ -827,17 +803,17 @@ def auto_ensemble_process(
 
             current_progress = (i + 1) * model_progress_per_step
             current_progress = clamp_percentage(current_progress)
-            yield None, i18n("completed_model").format(i+1, total_models, clean_model_name), update_progress_html(
-                i18n("completed_model_progress_label").format(i+1, total_models, clean_model_name, current_progress),
+            yield None, f"Completed model {i+1}/{total_models}: {clean_model_name}", update_progress_html(
+                f"Completed model {i+1}/{total_models}: {clean_model_name} ({current_progress}%)",
                 current_progress
             )
 
             model_outputs = glob.glob(os.path.join(model_output_dir, "*.wav"))
             if not model_outputs:
-                raise FileNotFoundError(i18n("model_output_failed").format(clean_model_name))
+                raise FileNotFoundError(f"Model output failed: {clean_model_name}")
             all_outputs.extend(model_outputs)
 
-        # Select compatible files for ensemble (e.g., all 'instrumental' or all 'vocals')
+        # Select compatible files for ensemble (e.g., all 'instrumental' or 'vocals')
         preferred_type = 'instrumental' if auto_extract_instrumental else 'vocals'
         ensemble_files = []
         for output in all_outputs:
@@ -848,7 +824,7 @@ def auto_ensemble_process(
             print(f"Warning: Insufficient {preferred_type} files ({len(ensemble_files)}). Falling back to all outputs.")
             ensemble_files = all_outputs
             if len(ensemble_files) < 2:
-                raise ValueError(i18n("insufficient_files_for_ensemble").format(len(ensemble_files)))
+                raise ValueError(f"Insufficient files for ensemble: {len(ensemble_files)}")
 
         # Enhanced outputs with Apollo (if enabled)
         enhanced_outputs = []
@@ -861,8 +837,8 @@ def auto_ensemble_process(
             total_outputs = len(all_outputs)
             apollo_progress_per_file = apollo_progress_range / total_outputs if total_outputs > 0 else 0
 
-            yield None, i18n("auto_enhancing_with_apollo").format(0, total_outputs), update_progress_html(
-                i18n("waiting_for_files_progress_label"), 60
+            yield None, f"Enhancing with Apollo: 0/{total_outputs}", update_progress_html(
+                "Waiting for files", 60
             )
 
             if auto_apollo_method == "mid_side_method":
@@ -885,7 +861,7 @@ def auto_ensemble_process(
             if not os.path.exists(ckpt):
                 raise FileNotFoundError(f"Apollo checkpoint file not found: {ckpt}")
             if not os.path.exists(config):
-                raise FileNotFoundError(f"Apollo config file not found: {config}")
+                raise FileNotFoundError(f"Apollo configuration file not found: {config}")
 
             for idx, output_file in enumerate(all_outputs):
                 original_file_name = sanitize_filename(os.path.splitext(os.path.basename(output_file))[0])
@@ -894,8 +870,8 @@ def auto_ensemble_process(
 
                 current_progress = 60 + (idx * apollo_progress_per_file)
                 current_progress = clamp_percentage(current_progress)
-                yield None, i18n("auto_enhancing_with_apollo").format(idx+1, total_outputs), update_progress_html(
-                    i18n("enhancing_with_apollo").format(idx+1, total_outputs, original_file_name),
+                yield None, f"Enhancing with Apollo: {idx+1}/{total_outputs}", update_progress_html(
+                    f"Enhancing with Apollo: {idx+1}/{total_outputs} ({original_file_name})",
                     current_progress
                 )
 
@@ -922,7 +898,7 @@ def auto_ensemble_process(
                         "--chunk_size", str(corrected_auto_chunk_size),
                         "--overlap", str(corrected_auto_overlap)
                     ]
-                    print(f"Running Mid Apollo command with chunk_size={corrected_auto_chunk_size}, overlap={corrected_auto_overlap}: {' '.join(command_mid)}")
+                    print(f"Running Mid Apollo command, chunk_size={corrected_auto_chunk_size}, overlap={corrected_auto_overlap}: {' '.join(command_mid)}")
                     result_mid = subprocess.run(command_mid, capture_output=True, text=True)
                     if result_mid.returncode != 0:
                         print(f"Apollo Mid processing failed: {result_mid.stderr}")
@@ -939,7 +915,7 @@ def auto_ensemble_process(
                         "--chunk_size", str(corrected_auto_chunk_size),
                         "--overlap", str(corrected_auto_overlap)
                     ]
-                    print(f"Running Side Apollo command with chunk_size={corrected_auto_chunk_size}, overlap={corrected_auto_overlap}: {' '.join(command_side)}")
+                    print(f"Running Side Apollo command, chunk_size={corrected_auto_chunk_size}, overlap={corrected_auto_overlap}: {' '.join(command_side)}")
                     result_side = subprocess.run(command_side, capture_output=True, text=True)
                     if result_side.returncode != 0:
                         print(f"Apollo Side processing failed: {result_side.stderr}")
@@ -968,18 +944,18 @@ def auto_ensemble_process(
                         "--chunk_size", str(corrected_auto_chunk_size),
                         "--overlap", str(corrected_auto_overlap)
                     ]
-                    print(f"Running Normal Apollo command with chunk_size={corrected_auto_chunk_size}, overlap={corrected_auto_overlap}: {' '.join(command)}")
+                    print(f"Running Normal Apollo command, chunk_size={corrected_auto_chunk_size}, overlap={corrected_auto_overlap}: {' '.join(command)}")
                     apollo_process = subprocess.Popen(
                         command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True
                     )
                     stdout_output = ""
                     for line in apollo_process.stdout:
-                        print(f"Apollo Enhancing {original_file_name}: {line.strip()}")
+                        print(f"Apollo Enhancement {original_file_name}: {line.strip()}")
                         stdout_output += line
                     apollo_process.wait()
 
                     if apollo_process.returncode != 0:
-                        print(f"Apollo failed for {output_file}: {stdout_output}")
+                        print(f"Apollo processing failed: {output_file}: {stdout_output}")
                         enhanced_outputs.append(output_file)
                         continue
 
@@ -987,16 +963,16 @@ def auto_ensemble_process(
 
                 current_progress = 60 + ((idx + 1) * apollo_progress_per_file)
                 current_progress = clamp_percentage(current_progress)
-                yield None, i18n("auto_enhancing_with_apollo").format(idx+1, total_outputs), update_progress_html(
-                    i18n("enhancing_with_apollo").format(idx+1, total_outputs, original_file_name),
+                yield None, f"Enhancing with Apollo: {idx+1}/{total_outputs}", update_progress_html(
+                    f"Enhancing with Apollo: {idx+1}/{total_outputs} ({original_file_name})",
                     current_progress
                 )
 
             all_outputs = enhanced_outputs
 
         # Allocate 10% for ensemble (90-100%)
-        yield None, i18n("performing_ensemble"), update_progress_html(
-            i18n("performing_ensemble_progress_label"), 90
+        yield None, "Performing ensemble", update_progress_html(
+            "Performing ensemble", 90
         )
 
         quoted_files = [f'"{f}"' for f in ensemble_files]
@@ -1010,8 +986,8 @@ def auto_ensemble_process(
             "--output", f'"{output_path}"'
         ]
 
-        print(i18n("memory_usage_before_ensemble").format(psutil.virtual_memory().percent))
-        print(f"Running Ensemble command: {' '.join(ensemble_cmd)}")
+        print(f"Memory usage before ensemble: {psutil.virtual_memory().percent}%")
+        print(f"Running ensemble command: {' '.join(ensemble_cmd)}")
         process = subprocess.Popen(
             " ".join(ensemble_cmd),
             shell=True,
@@ -1023,15 +999,15 @@ def auto_ensemble_process(
         )
 
         start_time = time.time()
-        total_estimated_time = 10.0  # Adjust based on actual ensemble time
+        total_estimated_time = 10.0  # Adjust based on actual ensemble duration
         elapsed_time = 0
         while elapsed_time < total_estimated_time:
             elapsed_time = time.time() - start_time
-            # Scale progress within 90-98%
+            # Scale progress between 90-98%
             progress_value = 90 + ((elapsed_time / total_estimated_time) * 8)
             progress_value = clamp_percentage(progress_value)
-            yield None, i18n("performing_ensemble"), update_progress_html(
-                i18n("ensembling_progress").format(progress_value),
+            yield None, "Performing ensemble", update_progress_html(
+                f"Ensembling progress: {progress_value}%",
                 progress_value
             )
             time.sleep(0.1)
@@ -1047,21 +1023,21 @@ def auto_ensemble_process(
 
         process.wait()
         if process.returncode != 0:
-            print(i18n("error").format(stderr_output))
-            yield None, i18n("error").format(stderr_output), update_progress_html(
-                i18n("error_occurred_progress_label"), 0
+            print(f"Error: {stderr_output}")
+            yield None, f"Error: {stderr_output}", update_progress_html(
+                "Error occurred", 0
             )
             return
 
-        print(i18n("memory_usage_after_ensemble").format(psutil.virtual_memory().percent))
+        print(f"Memory usage after ensemble: {psutil.virtual_memory().percent}%")
 
-        # Apply Matchering to the ensemble output
+        # Apply Matchering to ensemble output
         if auto_use_matchering and os.path.exists(output_path):
-            yield None, i18n("applying_matchering"), update_progress_html(
-                i18n("applying_matchering_progress_label"), 98
+            yield None, "Applying Matchering", update_progress_html(
+                "Applying Matchering", 98
             )
 
-            # Find clear segment
+            # Find clean segment
             segment_start, segment_end, segment_audio = find_clear_segment(audio_path)
             segment_path = os.path.join(tempfile.gettempdir(), "matchering_segment.wav")
             save_segment(segment_audio, 44100, segment_path)
@@ -1082,23 +1058,23 @@ def auto_ensemble_process(
 
             output_path = mastered_output_path
 
-        yield None, i18n("finalizing_ensemble_output"), update_progress_html(
-            i18n("finalizing_ensemble_output_progress_label"), 98
+        yield None, "Finalizing ensemble output", update_progress_html(
+            "Finalizing ensemble output", 98
         )
 
         if not os.path.exists(output_path):
-            raise RuntimeError(i18n("ensemble_file_creation_failed").format(output_path))
+            raise RuntimeError(f"Ensemble file creation failed: {output_path}")
 
-        yield output_path, i18n("success_output_created"), update_progress_html(
-            i18n("ensemble_completed_progress_label"), 100
+        yield output_path, "Success: Output created", update_progress_html(
+            "Ensemble completed", 100
         )
 
     except Exception as e:
-        print(f"Error in auto_ensemble_process: {str(e)}")
+        print(f"auto_ensemble_process error: {str(e)}")
         import traceback
         traceback.print_exc()
-        yield None, i18n("error").format(str(e)), update_progress_html(
-            i18n("error_occurred_progress_label"), 0
+        yield None, f"Error: {str(e)}", update_progress_html(
+            "Error occurred", 0
         )
     finally:
         shutil.rmtree(auto_ensemble_temp, ignore_errors=True)
