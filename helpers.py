@@ -100,6 +100,14 @@ def get_original_category(translated_category):
             return original_cat
     return None
 
+def clamp_percentage(value):
+    """Clamp percentage values to the 0-100 range."""
+    try:
+        return min(max(float(value), 0), 100)
+    except (ValueError, TypeError):
+        print(f"Warning: Invalid percentage value {value}, defaulting to 0")
+        return 0    
+
 def update_model_dropdown(category, favorites=None):
     """Update model dropdown choices, with favorites prefixed by ⭐ and sorted to top."""
     if favorites is None:
