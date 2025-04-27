@@ -12,8 +12,9 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(current_dir)
 
 from datetime import datetime
-from helpers import INPUT_DIR, OLD_OUTPUT_DIR, ENSEMBLE_DIR, AUTO_ENSEMBLE_TEMP, move_old_files, clear_directory, BASE_DIR, clean_model, extract_model_name_from_checkpoint, sanitize_filename, find_clear_segment, save_segment, run_matchering
+from helpers import INPUT_DIR, OLD_OUTPUT_DIR, ENSEMBLE_DIR, AUTO_ENSEMBLE_TEMP, move_old_files, clear_directory, BASE_DIR, clean_model, extract_model_name_from_checkpoint, sanitize_filename, find_clear_segment, save_segment, run_matchering, clamp_percentage
 from model import get_model_config
+from apollo_processing import process_with_apollo  # Import Apollo processing
 import torch
 import yaml
 import gradio as gr
@@ -71,14 +72,6 @@ def refresh_auto_output():
         return latest_file, "Output refreshed successfully"
     except Exception as e:
         return None, f"Error refreshing output: {str(e)}"
-
-def clamp_percentage(value):
-    """Clamp percentage values to the 0-100 range."""
-    try:
-        return min(max(float(value), 0), 100)
-    except (ValueError, TypeError):
-        print(f"Warning: Invalid percentage value {value}, defaulting to 0")
-        return 0
 
 def update_progress_html(progress_label, progress_percent):
     """Generate progress HTML."""
@@ -254,180 +247,23 @@ def run_command_and_process_files(
             else:
                 normalized_outputs.append(output_file)
 
-        # Apollo processing only if use_apollo is True
+        # Apollo processing
         if use_apollo:
-            apollo_script = "/content/Apollo/inference.py"
+            normalized_outputs = process_with_apollo(
+                output_files=normalized_outputs,
+                output_dir=OUTPUT_DIR,
+                apollo_chunk_size=apollo_chunk_size,
+                apollo_overlap=apollo_overlap,
+                apollo_method=apollo_method,
+                apollo_normal_model=apollo_normal_model,
+                apollo_midside_model=apollo_midside_model,
+                output_format=output_format,
+                progress=progress,
+                total_progress_start=80,
+                total_progress_end=100
+            )
 
-            print(f"Apollo parameters - chunk_size: {apollo_chunk_size}, overlap: {apollo_overlap}, method: {apollo_method}, normal_model: {apollo_normal_model}, midside_model: {apollo_midside_model}")
-
-            if apollo_method == "mid_side_method":
-                if apollo_midside_model == "MP3 Enhancer":
-                    ckpt = "/content/Apollo/model/pytorch_model.bin"
-                    config = "/content/Apollo/configs/apollo.yaml"
-                elif apollo_midside_model == "Lew Vocal Enhancer":
-                    ckpt = "/content/Apollo/model/apollo_model.ckpt"
-                    config = "/content/Apollo/configs/apollo.yaml"
-                elif apollo_midside_model == "Lew Vocal Enhancer v2 (beta)":
-                    ckpt = "/content/Apollo/model/apollo_model_v2.ckpt"
-                    config = "/content/Apollo/configs/config_apollo_vocal.yaml"
-                else:
-                    ckpt = "/content/Apollo/model/apollo_universal_model.ckpt"
-                    config = "/content/Apollo/configs/config_apollo.yaml"
-            else:
-                if apollo_normal_model == "MP3 Enhancer":
-                    ckpt = "/content/Apollo/model/pytorch_model.bin"
-                    config = "/content/Apollo/configs/apollo.yaml"
-                elif apollo_normal_model == "Lew Vocal Enhancer":
-                    ckpt = "/content/Apollo/model/apollo_model.ckpt"
-                    config = "/content/Apollo/configs/apollo.yaml"
-                elif apollo_normal_model == "Lew Vocal Enhancer v2 (beta)":
-                    ckpt = "/content/Apollo/model/apollo_model_v2.ckpt"
-                    config = "/content/Apollo/configs/config_apollo_vocal.yaml"
-                else:
-                    ckpt = "/content/Apollo/model/apollo_universal_model.ckpt"
-                    config = "/content/Apollo/configs/config_apollo.yaml"
-
-            if not os.path.exists(ckpt):
-                raise FileNotFoundError(f"Apollo checkpoint file not found: {ckpt}")
-            if not os.path.exists(config):
-                raise FileNotFoundError(f"Apollo configuration file not found: {config}")
-
-            enhanced_files = []
-            total_files = len([f for f in normalized_outputs if f and os.path.exists(f)])
-            progress_per_file = 20 / total_files if total_files > 0 else 20  # 80-100% for Apollo
-
-            for idx, output_file in enumerate(normalized_outputs):
-                if output_file and os.path.exists(output_file):
-                    original_file_name = sanitize_filename(os.path.splitext(os.path.basename(output_file))[0])
-                    enhancement_suffix = "_Mid_Side_Enhanced" if apollo_method == "mid_side_method" else "_Enhanced"
-                    enhanced_output = os.path.join(OUTPUT_DIR, f"{original_file_name}{enhancement_suffix}.{output_format}")
-
-                    try:
-                        # Progress update for Apollo processing
-                        if progress is not None and callable(getattr(progress, '__call__', None)):
-                            current_progress = 80 + (idx * progress_per_file)
-                            current_progress = clamp_percentage(current_progress)
-                            progress(current_progress, desc=f"Enhancing with Apollo... ({idx+1}/{total_files})")
-                        else:
-                            print(f"Progress is not callable or None, skipping Apollo progress update: file {idx+1}/{total_files}")
-
-                        if apollo_method == "mid_side_method":
-                            audio, sr = librosa.load(output_file, mono=False, sr=None)
-                            if audio.ndim == 1:
-                                audio = np.array([audio, audio])
-
-                            mid = (audio[0] + audio[1]) * 0.5
-                            side = (audio[0] - audio[1]) * 0.5
-
-                            mid_file = os.path.join(OUTPUT_DIR, f"{original_file_name}_mid_temp.wav")
-                            side_file = os.path.join(OUTPUT_DIR, f"{original_file_name}_side_temp.wav")
-                            sf.write(mid_file, mid, sr)
-                            sf.write(side_file, side, sr)
-
-                            mid_output = os.path.join(OUTPUT_DIR, f"{original_file_name}_mid_enhanced.{output_format}")
-                            command_mid = [
-                                "python", apollo_script,
-                                "--in_wav", mid_file,
-                                "--out_wav", mid_output,
-                                "--chunk_size", str(int(apollo_chunk_size)),
-                                "--overlap", str(int(apollo_overlap)),
-                                "--ckpt", ckpt,
-                                "--config", config
-                            ]
-                            print(f"Running Apollo Mid command: {' '.join(command_mid)}")
-                            result_mid = subprocess.run(command_mid, capture_output=True, text=True)
-                            if result_mid.returncode != 0:
-                                print(f"Apollo Mid processing failed: {result_mid.stderr}")
-                                enhanced_files.append(output_file)
-                                continue
-
-                            side_output = os.path.join(OUTPUT_DIR, f"{original_file_name}_side_enhanced.{output_format}")
-                            command_side = [
-                                "python", apollo_script,
-                                "--in_wav", side_file,
-                                "--out_wav", side_output,
-                                "--chunk_size", str(int(apollo_chunk_size)),
-                                "--overlap", str(int(apollo_overlap)),
-                                "--ckpt", ckpt,
-                                "--config", config
-                            ]
-                            print(f"Running Apollo Side command: {' '.join(command_side)}")
-                            result_side = subprocess.run(command_side, capture_output=True, text=True)
-                            if result_side.returncode != 0:
-                                print(f"Apollo Side processing failed: {result_side.stderr}")
-                                enhanced_files.append(output_file)
-                                continue
-
-                            if not (os.path.exists(mid_output) and os.path.exists(side_output)):
-                                print(f"Apollo outputs missing: mid={mid_output}, side={side_output}")
-                                enhanced_files.append(output_file)
-                                continue
-
-                            mid_audio, _ = librosa.load(mid_output, sr=sr, mono=True)
-                            side_audio, _ = librosa.load(side_output, sr=sr, mono=True)
-                            left = mid_audio + side_audio
-                            right = mid_audio - side_audio
-                            combined = np.array([left, right])
-
-                            os.makedirs(os.path.dirname(enhanced_output), exist_ok=True)
-                            sf.write(enhanced_output, combined.T, sr)
-
-                            temp_files = [mid_file, side_file, mid_output, side_output]
-                            for temp_file in temp_files:
-                                try:
-                                    if os.path.exists(temp_file):
-                                        os.remove(temp_file)
-                                except Exception as e:
-                                    print(f"Could not delete temporary file {temp_file}: {str(e)}")
-
-                            enhanced_files.append(enhanced_output)
-                        else:
-                            command = [
-                                "python", apollo_script,
-                                "--in_wav", output_file,
-                                "--out_wav", enhanced_output,
-                                "--chunk_size", str(int(apollo_chunk_size)),
-                                "--overlap", str(int(apollo_overlap)),
-                                "--ckpt", ckpt,
-                                "--config", config
-                            ]
-                            print(f"Running Apollo Normal command: {' '.join(command)}")
-                            apollo_process = subprocess.run(
-                                command,
-                                capture_output=True,
-                                text=True
-                            )
-                            if apollo_process.returncode != 0:
-                                print(f"Apollo processing failed: {output_file}: {apollo_process.stderr}")
-                                enhanced_files.append(output_file)
-                                continue
-
-                            if not os.path.exists(enhanced_output):
-                                print(f"Apollo output missing: {enhanced_output}")
-                                enhanced_files.append(output_file)
-                                continue
-
-                            enhanced_files.append(enhanced_output)
-
-                        # Progress update after each file
-                        if progress is not None and callable(getattr(progress, '__call__', None)):
-                            current_progress = 80 + ((idx + 1) * progress_per_file)
-                            current_progress = clamp_percentage(current_progress)
-                            progress(current_progress, desc=f"Enhancing with Apollo... ({idx+1}/{total_files})")
-
-                    except Exception as e:
-                        print(f"Error during Apollo processing: {output_file}: {str(e)}")
-                        enhanced_files.append(output_file)
-                        continue
-                else:
-                    enhanced_files.append(output_file)
-
-            # Final progress update
-            if progress is not None and callable(getattr(progress, '__call__', None)):
-                progress(100, desc="Apollo enhancement complete")
-            return tuple(enhanced_files)
-
-        # If use_apollo is False, return normalized outputs without Apollo processing
+        # Final progress update
         if progress is not None and callable(getattr(progress, '__call__', None)):
             progress(100, desc="Separation complete")
         return tuple(normalized_outputs)
@@ -827,148 +663,24 @@ def auto_ensemble_process(
                 raise ValueError(f"Insufficient files for ensemble: {len(ensemble_files)}")
 
         # Enhanced outputs with Apollo (if enabled)
-        enhanced_outputs = []
         if auto_use_apollo:
-            apollo_script = "/content/Apollo/inference.py"
-            print(f"Apollo parameters - chunk_size: {corrected_auto_chunk_size}, overlap: {corrected_auto_overlap}, method: {auto_apollo_method}, normal_model: {auto_apollo_normal_model}")
-
-            # Allocate 30% for Apollo enhancement (60-90%)
-            apollo_progress_range = 30  # 60-90%
-            total_outputs = len(all_outputs)
-            apollo_progress_per_file = apollo_progress_range / total_outputs if total_outputs > 0 else 0
-
-            yield None, f"Enhancing with Apollo: 0/{total_outputs}", update_progress_html(
+            yield None, f"Enhancing with Apollo: 0/{len(all_outputs)}", update_progress_html(
                 "Waiting for files", 60
             )
 
-            if auto_apollo_method == "mid_side_method":
-                ckpt = "/content/Apollo/model/apollo_universal_model.ckpt"
-                config = "/content/Apollo/configs/config_apollo.yaml"
-            else:
-                if auto_apollo_normal_model == "MP3 Enhancer":
-                    ckpt = "/content/Apollo/model/pytorch_model.bin"
-                    config = "/content/Apollo/configs/apollo.yaml"
-                elif auto_apollo_normal_model == "Lew Vocal Enhancer":
-                    ckpt = "/content/Apollo/model/apollo_model.ckpt"
-                    config = "/content/Apollo/configs/apollo.yaml"
-                elif auto_apollo_normal_model == "Lew Vocal Enhancer v2 (beta)":
-                    ckpt = "/content/Apollo/model/apollo_model_v2.ckpt"
-                    config = "/content/Apollo/configs/config_apollo_vocal.yaml"
-                else:
-                    ckpt = "/content/Apollo/model/apollo_universal_model.ckpt"
-                    config = "/content/Apollo/configs/config_apollo.yaml"
-
-            if not os.path.exists(ckpt):
-                raise FileNotFoundError(f"Apollo checkpoint file not found: {ckpt}")
-            if not os.path.exists(config):
-                raise FileNotFoundError(f"Apollo configuration file not found: {config}")
-
-            for idx, output_file in enumerate(all_outputs):
-                original_file_name = sanitize_filename(os.path.splitext(os.path.basename(output_file))[0])
-                enhancement_suffix = "_Mid_Side_Enhanced" if auto_apollo_method == "mid_side_method" else "_Enhanced"
-                enhanced_output = os.path.join(auto_ensemble_temp, f"{original_file_name}{enhancement_suffix}.wav")
-
-                current_progress = 60 + (idx * apollo_progress_per_file)
-                current_progress = clamp_percentage(current_progress)
-                yield None, f"Enhancing with Apollo: {idx+1}/{total_outputs}", update_progress_html(
-                    f"Enhancing with Apollo: {idx+1}/{total_outputs} ({original_file_name})",
-                    current_progress
-                )
-
-                if auto_apollo_method == "mid_side_method":
-                    audio, sr = librosa.load(output_file, mono=False, sr=None)
-                    if audio.ndim == 1:
-                        audio = np.array([audio, audio])
-
-                    mid = (audio[0] + audio[1]) * 0.5
-                    side = (audio[0] - audio[1]) * 0.5
-
-                    mid_file = os.path.join(auto_ensemble_temp, f"{original_file_name}_mid_temp.wav")
-                    side_file = os.path.join(auto_ensemble_temp, f"{original_file_name}_side_temp.wav")
-                    sf.write(mid_file, mid, sr)
-                    sf.write(side_file, side, sr)
-
-                    mid_output = os.path.join(auto_ensemble_temp, f"{original_file_name}_mid_enhanced.wav")
-                    command_mid = [
-                        "python", apollo_script,
-                        "--in_wav", mid_file,
-                        "--out_wav", mid_output,
-                        "--ckpt", ckpt,
-                        "--config", config,
-                        "--chunk_size", str(corrected_auto_chunk_size),
-                        "--overlap", str(corrected_auto_overlap)
-                    ]
-                    print(f"Running Mid Apollo command, chunk_size={corrected_auto_chunk_size}, overlap={corrected_auto_overlap}: {' '.join(command_mid)}")
-                    result_mid = subprocess.run(command_mid, capture_output=True, text=True)
-                    if result_mid.returncode != 0:
-                        print(f"Apollo Mid processing failed: {result_mid.stderr}")
-                        enhanced_outputs.append(output_file)
-                        continue
-
-                    side_output = os.path.join(auto_ensemble_temp, f"{original_file_name}_side_enhanced.wav")
-                    command_side = [
-                        "python", apollo_script,
-                        "--in_wav", side_file,
-                        "--out_wav", side_output,
-                        "--ckpt", ckpt,
-                        "--config", config,
-                        "--chunk_size", str(corrected_auto_chunk_size),
-                        "--overlap", str(corrected_auto_overlap)
-                    ]
-                    print(f"Running Side Apollo command, chunk_size={corrected_auto_chunk_size}, overlap={corrected_auto_overlap}: {' '.join(command_side)}")
-                    result_side = subprocess.run(command_side, capture_output=True, text=True)
-                    if result_side.returncode != 0:
-                        print(f"Apollo Side processing failed: {result_side.stderr}")
-                        enhanced_outputs.append(output_file)
-                        continue
-
-                    mid_audio, _ = librosa.load(mid_output, sr=sr, mono=True)
-                    side_audio, _ = librosa.load(side_output, sr=sr, mono=True)
-                    left = mid_audio + side_audio
-                    right = mid_audio - side_audio
-                    combined = np.array([left, right])
-                    sf.write(enhanced_output, combined.T, sr)
-
-                    for temp_file in [mid_file, side_file, mid_output, side_output]:
-                        if os.path.exists(temp_file):
-                            os.remove(temp_file)
-
-                    enhanced_outputs.append(enhanced_output)
-                else:
-                    command = [
-                        "python", apollo_script,
-                        "--in_wav", output_file,
-                        "--out_wav", enhanced_output,
-                        "--ckpt", ckpt,
-                        "--config", config,
-                        "--chunk_size", str(corrected_auto_chunk_size),
-                        "--overlap", str(corrected_auto_overlap)
-                    ]
-                    print(f"Running Normal Apollo command, chunk_size={corrected_auto_chunk_size}, overlap={corrected_auto_overlap}: {' '.join(command)}")
-                    apollo_process = subprocess.Popen(
-                        command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True
-                    )
-                    stdout_output = ""
-                    for line in apollo_process.stdout:
-                        print(f"Apollo Enhancement {original_file_name}: {line.strip()}")
-                        stdout_output += line
-                    apollo_process.wait()
-
-                    if apollo_process.returncode != 0:
-                        print(f"Apollo processing failed: {output_file}: {stdout_output}")
-                        enhanced_outputs.append(output_file)
-                        continue
-
-                    enhanced_outputs.append(enhanced_output)
-
-                current_progress = 60 + ((idx + 1) * apollo_progress_per_file)
-                current_progress = clamp_percentage(current_progress)
-                yield None, f"Enhancing with Apollo: {idx+1}/{total_outputs}", update_progress_html(
-                    f"Enhancing with Apollo: {idx+1}/{total_outputs} ({original_file_name})",
-                    current_progress
-                )
-
-            all_outputs = enhanced_outputs
+            all_outputs = process_with_apollo(
+                output_files=all_outputs,
+                output_dir=auto_ensemble_temp,
+                apollo_chunk_size=corrected_auto_chunk_size,
+                apollo_overlap=corrected_auto_overlap,
+                apollo_method=auto_apollo_method,
+                apollo_normal_model=auto_apollo_normal_model,
+                apollo_midside_model=None,  # Not used in auto_ensemble
+                output_format=export_format.split()[0].lower(),
+                progress=progress,
+                total_progress_start=60,
+                total_progress_end=90
+            )
 
         # Allocate 10% for ensemble (90-100%)
         yield None, "Performing ensemble", update_progress_html(
