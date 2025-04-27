@@ -14,6 +14,13 @@ import torch.nn as nn
 import numpy as np
 from assets.i18n.i18n import I18nAuto
 
+# Colab kontrolü
+try:
+    from google.colab import drive
+    IS_COLAB = True
+except ImportError:
+    IS_COLAB = False
+
 i18n = I18nAuto()
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -54,7 +61,10 @@ def run_folder(model, args, config, device, verbose: bool = False):
     print(i18n("total_files_found").format(len(mixture_paths), sample_rate))
 
     instruments = prefer_target_instrument(config)[:]
-    os.makedirs(args.store_dir, exist_ok=True)
+
+    # Çıktı klasörünü kullan (processing.py tarafından ayarlandı)
+    store_dir = args.store_dir
+    os.makedirs(store_dir, exist_ok=True)
 
     if not verbose:
         mixture_paths = tqdm(mixture_paths, desc=i18n("total_progress"))
@@ -123,7 +133,7 @@ def run_folder(model, args, config, device, verbose: bool = False):
 
             shortened_filename = shorten_filename(os.path.basename(path))
             output_filename = f"{shortened_filename}_{instr}.{codec}"
-            output_path = os.path.join(args.store_dir, output_filename)
+            output_path = os.path.join(store_dir, output_filename)
             sf.write(output_path, estimates.T, sr, subtype=subtype)
 
     print(i18n("elapsed_time").format(time.time() - start_time))
@@ -136,7 +146,7 @@ def proc_folder(args):
     parser.add_argument("--start_check_point", type=str, default='', help=i18n("start_checkpoint_help"))
     parser.add_argument("--input_folder", type=str, help=i18n("input_folder_help"))
     parser.add_argument("--audio_path", type=str, help=i18n("audio_path_help"))
-    parser.add_argument("--store_dir", default="", type=str, help=i18n("store_dir_help"))
+    parser.add_argument("--store_dir", type=str, default="", help=i18n("store_dir_help"))
     parser.add_argument("--device_ids", nargs='+', type=int, default=0, help=i18n("device_ids_help"))
     parser.add_argument("--extract_instrumental", action='store_true', help=i18n("extract_instrumental_help"))
     parser.add_argument("--disable_detailed_pbar", action='store_true', help=i18n("disable_detailed_pbar_help"))
@@ -146,6 +156,8 @@ def proc_folder(args):
     parser.add_argument("--pcm_type", type=str, choices=['PCM_16', 'PCM_24'], default='PCM_24', help=i18n("pcm_type_help"))
     parser.add_argument("--use_tta", action='store_true', help=i18n("use_tta_help"))
     parser.add_argument("--lora_checkpoint", type=str, default='', help=i18n("lora_checkpoint_help"))
+    parser.add_argument("--chunk_size", type=int, default=1000000, help="Inference chunk size")
+    parser.add_argument("--overlap", type=int, default=4, help="Inference overlap factor")
 
     if args is None:
         args = parser.parse_args()
