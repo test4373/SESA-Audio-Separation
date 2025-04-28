@@ -638,13 +638,18 @@ def create_interface():
                                 preset = presets[preset_name]
                                 # Mark starred models with ⭐
                                 favorite_models = [f"{model} ⭐" if model in favorites else model for model in preset["models"]]
-                                print(f"Preset '{preset_name}' loaded with models: {favorite_models}")
+                                # Get the category from the preset, default to current category if not specified
+                                preset_category = preset.get("auto_category_dropdown", category)
+                                # Update model choices based on the preset's category
+                                model_choices = update_model_dropdown(preset_category, favorites=favorites)["choices"]
+                                print(f"Preset '{preset_name}' loaded with models: {favorite_models}, category: {preset_category}")
                                 return (
-                                    gr.update(value=favorite_models),
-                                    gr.update(value=preset["ensemble_method"])
+                                    gr.update(value=preset_category),  # Update auto_category_dropdown
+                                    gr.update(choices=model_choices, value=favorite_models),  # Update selected_models
+                                    gr.update(value=preset["ensemble_method"])  # Update auto_ensemble_type
                                 )
                             print(f"Preset '{preset_name}' not found.")
-                            return gr.update(), gr.update()
+                            return gr.update(), gr.update(), gr.update()
 
                         def sync_presets():
                             """Reload presets from config and update dropdown."""
@@ -654,22 +659,28 @@ def create_interface():
                         preset_dropdown.change(
                             fn=load_preset,
                             inputs=[preset_dropdown, presets_state, auto_category_dropdown, favorites_state],
-                            outputs=[selected_models, auto_ensemble_type]
+                            outputs=[auto_category_dropdown, selected_models, auto_ensemble_type]
                         )
 
-                        def handle_save_preset(preset_name, models, ensemble_method, presets, favorites):
+                        def handle_save_preset(preset_name, models, ensemble_method, presets, favorites, auto_category_dropdown):
                             if not preset_name:
                                 return gr.update(), presets, i18n("no_preset_name_provided")
                             if not models and not favorites:
                                 return gr.update(), presets, i18n("no_models_selected_for_preset")
-                            new_presets = save_preset(presets, preset_name, models, ensemble_method)
+                            new_presets = save_preset(
+                                presets, 
+                                preset_name, 
+                                models, 
+                                ensemble_method,
+                                auto_category_dropdown=auto_category_dropdown  # Pass the category explicitly
+                            )
                             save_config(favorites, load_config()["settings"], new_presets)
                             print(f"Preset dropdown updated with choices: {list(new_presets.keys())}")
                             return gr.update(choices=list(new_presets.keys()), value=None), new_presets, i18n("preset_saved").format(preset_name)
 
                         save_preset_btn.click(
                             fn=handle_save_preset,
-                            inputs=[preset_name_input, selected_models, auto_ensemble_type, presets_state, favorites_state],
+                            inputs=[preset_name_input, selected_models, auto_ensemble_type, presets_state, favorites_state, auto_category_dropdown],
                             outputs=[preset_dropdown, presets_state]
                         )
 
