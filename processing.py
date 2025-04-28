@@ -46,20 +46,30 @@ warnings.filterwarnings("ignore")
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 INFERENCE_PATH = os.path.join(BASE_DIR, "inference.py")
 ENSEMBLE_PATH = os.path.join(BASE_DIR, "ensemble.py")
-AUTO_ENSEMBLE_OUTPUT = "/content/drive/MyDrive/ensemble_output"
 
 if IS_COLAB:
-    OUTPUT_DIR = '/content/drive/MyDrive/!output_file'  # Google Drive, appears at the top
+    AUTO_ENSEMBLE_OUTPUT = "/content/drive/MyDrive/ensemble_output"
+    OUTPUT_DIR = "/content/drive/MyDrive/!output_file"
 else:
+    AUTO_ENSEMBLE_OUTPUT = os.path.join(BASE_DIR, "ensemble_output")
     OUTPUT_DIR = os.path.join(BASE_DIR, "output")
-AUTO_ENSEMBLE_OUTPUT = os.path.join(BASE_DIR, "ensemble_output")
+
+os.makedirs(AUTO_ENSEMBLE_OUTPUT, exist_ok=True)
+os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 def setup_directories():
     """Create necessary directories and check Google Drive access."""
     if IS_COLAB:
-        if not os.path.exists('/content/drive/MyDrive'):
-            raise RuntimeError("Google Drive not mounted. Please run 'from google.colab import drive; drive.mount('/content/drive', force_remount=True)' first.")
-        os.makedirs(OUTPUT_DIR, exist_ok=True)
+        try:
+            if not os.path.exists('/content/drive/MyDrive'):
+                print("Mounting Google Drive...")
+                from google.colab import drive
+                drive.mount('/content/drive', force_remount=True)
+            if not os.path.exists('/content/drive/MyDrive'):
+                raise RuntimeError("Google Drive mount failed. Please mount manually with 'from google.colab import drive; drive.mount('/content/drive', force_remount=True)'.")
+        except Exception as e:
+            raise RuntimeError(f"Failed to mount Google Drive: {str(e)}")
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
     os.makedirs(INPUT_DIR, exist_ok=True)
     os.makedirs(OLD_OUTPUT_DIR, exist_ok=True)
     os.makedirs(AUTO_ENSEMBLE_OUTPUT, exist_ok=True)
@@ -535,7 +545,7 @@ def auto_ensemble_process(
             existing_files = os.listdir(INPUT_DIR)
             if not existing_files:
                 yield None, i18n("no_input_audio_provided"), update_progress_html(i18n("error_occurred"), 0)
-            return
+                return
             audio_path = os.path.join(INPUT_DIR, existing_files[0])
         else:
             audio_path = auto_input_audio_file.name if hasattr(auto_input_audio_file, 'name') else auto_input_audio_file
@@ -700,42 +710,41 @@ def auto_ensemble_process(
         ]
 
         print(f"Running ensemble command: {' '.join(ensemble_cmd)}")
-        process = subprocess.Popen(
-            " ".join(ensemble_cmd),
-            shell=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            bufsize=1,
-            universal_newlines=True
-        )
-
-        start_time = time.time()
-        total_estimated_time = 10.0
-        elapsed_time = 0
-        while elapsed_time < total_estimated_time:
-            elapsed_time = time.time() - start_time
-            progress_value = 90 + ((elapsed_time / total_estimated_time) * 8)
-            progress_value = clamp_percentage(progress_value)
-            yield None, i18n("performing_ensemble"), update_progress_html(
-                i18n("ensembling_progress").format(progress_value),
-                progress_value
+        try:
+            process = subprocess.Popen(
+                " ".join(ensemble_cmd),
+                shell=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                bufsize=1,
+                universal_newlines=True
             )
-            time.sleep(0.1)
 
-        stdout_output = ""
-        stderr_output = ""
-        for line in process.stdout:
-            stdout_output += line
-            print(line.strip())
-        for line in process.stderr:
-            stderr_output += line
-            print(line.strip())
+            stdout_output = ""
+            stderr_output = ""
+            for line in process.stdout:
+                stdout_output += line
+                print(f"Ensemble stdout: {line.strip()}")
+            for line in process.stderr:
+                stderr_output += line
+                print(f"Ensemble stderr: {line.strip()}")
 
-        process.wait()
-        if process.returncode != 0:
-            print(f"Error: {stderr_output}")
-            yield None, i18n("ensemble_error").format(stderr_output), update_progress_html(
+            process.wait()
+            if process.returncode != 0:
+                print(f"Ensemble subprocess failed with code {process.returncode}: {stderr_output}")
+                yield None, i18n("ensemble_error").format(stderr_output), update_progress_html(
+                    i18n("error_occurred"), 0
+                )
+                return
+
+            print(f"Checking if output file exists: {output_path}")
+            if not os.path.exists(output_path):
+                raise RuntimeError(f"Ensemble output file not created at {output_path}. Stdout: {stdout_output}, Stderr: {stderr_output}")
+
+        except Exception as e:
+            print(f"Ensemble command execution failed: {str(e)}")
+            yield None, i18n("ensemble_error").format(str(e)), update_progress_html(
                 i18n("error_occurred"), 0
             )
             return
@@ -746,26 +755,39 @@ def auto_ensemble_process(
                 i18n("applying_matchering"), 98
             )
 
-            # Find clean segment (placeholder)
-            segment_start, segment_end, segment_audio = find_clear_segment(audio_path)
-            segment_path = os.path.join(tempfile.gettempdir(), "matchering_segment.wav")
-            save_segment(segment_audio, 44100, segment_path)
+            try:
+                # Find clean segment
+                segment_start, segment_end, segment_audio = find_clear_segment(audio_path)
+                segment_path = os.path.join(tempfile.gettempdir(), "matchering_segment.wav")
+                save_segment(segment_audio, 44100, segment_path)
 
-            # Master the ensemble output
-            mastered_output_path = os.path.join(AUTO_ENSEMBLE_OUTPUT, f"auto_ensemble_output_{timestamp}_mastered.wav")
-            run_matchering(
-                reference_path=segment_path,
-                target_path=output_path,
-                output_path=mastered_output_path,
-                passes=auto_matchering_passes,
-                bit_depth=24
-            )
+                # Master the ensemble output
+                mastered_output_path = os.path.join(AUTO_ENSEMBLE_OUTPUT, f"auto_ensemble_output_{timestamp}_mastered.wav")
+                print(f"Running Matchering: reference={segment_path}, target={output_path}, output={mastered_output_path}")
+                mastered_output = run_matchering(
+                    reference_path=segment_path,
+                    target_path=output_path,
+                    output_path=mastered_output_path,
+                    passes=auto_matchering_passes,
+                    bit_depth=24
+                )
 
-            # Clean up segment file
-            if os.path.exists(segment_path):
-                os.remove(segment_path)
+                # Verify mastered output
+                if not os.path.exists(mastered_output_path):
+                    raise RuntimeError(f"Matchering failed to create output at {mastered_output_path}")
 
-            output_path = mastered_output_path
+                # Clean up segment file
+                if os.path.exists(segment_path):
+                    os.remove(segment_path)
+
+                output_path = mastered_output_path
+                print(f"Matchering completed: {mastered_output_path}")
+            except Exception as e:
+                print(f"Matchering error: {str(e)}")
+                yield None, i18n("error").format(f"Matchering failed: {str(e)}"), update_progress_html(
+                    i18n("error_occurred"), 0
+                )
+                return
 
         yield None, i18n("finalizing_ensemble_output"), update_progress_html(
             i18n("finalizing_ensemble_output"), 98
@@ -774,7 +796,32 @@ def auto_ensemble_process(
         if not os.path.exists(output_path):
             raise RuntimeError(i18n("ensemble_file_creation_failed").format(output_path))
 
-        yield output_path, i18n("success_output_created"), update_progress_html(
+        # Verify write permissions for Google Drive directory
+        try:
+            print(f"Verifying write permissions for {AUTO_ENSEMBLE_OUTPUT}")
+            test_file = os.path.join(AUTO_ENSEMBLE_OUTPUT, "test_write.txt")
+            with open(test_file, "w") as f:
+                f.write("Test")
+            os.remove(test_file)
+            print(f"Write permissions verified for {AUTO_ENSEMBLE_OUTPUT}")
+        except Exception as e:
+            print(f"Write permission error for {AUTO_ENSEMBLE_OUTPUT}: {str(e)}")
+            yield None, i18n("error").format(f"Write permission error: {str(e)}"), update_progress_html(
+                i18n("error_occurred"), 0
+            )
+            return
+
+        # Verify file in Google Drive
+        print(f"Final output file: {output_path}")
+        if IS_COLAB:
+            drive_output_path = os.path.join("/content/drive/MyDrive/ensemble_output", os.path.basename(output_path))
+            print(f"Checking if file exists in Google Drive: {drive_output_path}")
+            if not os.path.exists(drive_output_path):
+                print(f"File not found in Google Drive, copying from local path: {output_path}")
+                shutil.copy(output_path, drive_output_path)
+                print(f"Copied to Google Drive: {drive_output_path}")
+
+        yield output_path, i18n("success_output_created") + f" Saved to {drive_output_path if IS_COLAB else output_path}", update_progress_html(
             i18n("ensemble_completed"), 100
         )
 
