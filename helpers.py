@@ -109,24 +109,21 @@ def clamp_percentage(value):
         return 0    
 
 def update_model_dropdown(category, favorites=None):
-    """Update model dropdown choices, with favorites prefixed by ⭐ and sorted to top."""
-    if favorites is None:
-        favorites = []
+    # Map translated category back to English
+    eng_cat = next((k for k in MODEL_CONFIGS.keys() if i18n(k) == category), list(MODEL_CONFIGS.keys())[0])
+    models = MODEL_CONFIGS.get(eng_cat, [])
+    choices = []
+    favorite_models = []
+    non_favorite_models = []
     
-    # Get models for the selected category
-    models = list(MODEL_CONFIGS.get(category, {}).keys())
+    for model in models:
+        model_name = f"{model} ⭐" if favorites and model in favorites else model
+        if favorites and model in favorites:
+            favorite_models.append(model_name)
+        else:
+            non_favorite_models.append(model_name)
     
-    # Separate favorites and non-favorites
-    favorite_models = [model for model in models if model in favorites]
-    non_favorite_models = [model for model in models if model not in favorites]
-    
-    # Add ⭐ prefix to favorites
-    favorite_choices = [f"⭐ {model}" for model in favorite_models]
-    non_favorite_choices = non_favorite_models
-    
-    # Combine with favorites first
-    choices = favorite_choices + non_favorite_choices
-    
+    choices = favorite_models + non_favorite_models
     return {"choices": choices}
 
 def handle_file_upload(uploaded_file, file_path, is_auto_ensemble=False):
