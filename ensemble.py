@@ -55,10 +55,6 @@ class AudioEnsembleEngine:
     def normalize_path(self, path):
         """Handle all path-related issues comprehensively."""
         try:
-            # Handle Google Colab specific paths
-            if '/content/drive/' in path:
-                path = '/gdrive/' + path.split('/content/drive/')[-1]
-            
             # Convert to absolute path
             path = str(Path(path).absolute().resolve())
             
@@ -263,6 +259,22 @@ class AudioEnsembleEngine:
             self.log_message(f"Target sample rate: {target_sr}Hz")
             self.log_message(f"Output path: {output_path}")
             
+            # Ensure output directory exists
+            output_dir = os.path.dirname(output_path) or '.'
+            os.makedirs(output_dir, exist_ok=True)
+            self.log_message(f"Output directory created/verified: {output_dir}")
+            
+            # Verify write permissions
+            try:
+                test_file = os.path.join(output_dir, "test_write.txt")
+                with open(test_file, "w") as f:
+                    f.write("Test")
+                os.remove(test_file)
+                self.log_message(f"Write permissions verified for: {output_dir}")
+            except Exception as e:
+                self.log_message(f"Write permission error for {output_dir}: {str(e)}")
+                raise ValueError(f"Cannot write to output directory {output_dir}: {str(e)}")
+            
             # Prepare weights
             if weights and len(weights) == len(valid_files):
                 weights = np.array(weights, dtype=np.float32)
@@ -278,6 +290,7 @@ class AudioEnsembleEngine:
                 shortest_frames = min(int(duration * r.samplerate) for r in readers)
                 
                 # Prepare output
+                self.log_message(f"Opening output file for writing: {output_path}")
                 with sf.SoundFile(output_path, 'w', target_sr, 2, 'PCM_24') as outfile:
                     # Process in chunks with progress bar
                     progress = tqdm(total=shortest_frames, unit='samples', desc='Processing')
