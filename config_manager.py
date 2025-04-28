@@ -41,6 +41,7 @@ def load_config():
             "selected_models": [],
             "auto_ensemble_type": "avg_wave",
             "manual_ensemble_type": "avg_wave",
+            "auto_category_dropdown": "Vocal Models",
             "manual_weights": ""
         },
         "presets": {}
@@ -104,6 +105,7 @@ def save_preset(presets, preset_name, models, ensemble_method, **kwargs):
         "auto_extract_instrumental": kwargs.get("auto_extract_instrumental", load_config()["settings"]["auto_extract_instrumental"]),
         "use_apollo": kwargs.get("use_apollo", load_config()["settings"]["use_apollo"]),
         "auto_apollo_chunk_size": kwargs.get("auto_apollo_chunk_size", load_config()["settings"]["auto_apollo_chunk_size"]),
+        "auto_category_dropdown": kwargs.get("auto_category_dropdown", load_config()["settings"]["auto_category_dropdown"]),  # Save category
         "auto_apollo_overlap": kwargs.get("auto_apollo_overlap", load_config()["settings"]["auto_apollo_overlap"]),
         "auto_apollo_method": kwargs.get("auto_apollo_method", load_config()["settings"]["auto_apollo_method"]),
         "auto_apollo_normal_model": kwargs.get("auto_apollo_normal_model", load_config()["settings"]["auto_apollo_normal_model"]),
