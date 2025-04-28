@@ -14,10 +14,18 @@ def load_config():
             "chunk_size": 352800,
             "overlap": 2,
             "export_format": "wav FLOAT",
+            "auto_use_tta": False,
             "use_tta": False,
             "use_demud_phaseremix_inst": False,
+            "auto_extract_instrumental": False,
             "extract_instrumental": False,
-            "use_apollo": True,
+            "use_apollo": False,
+            "auto_use_apollo": False,
+            "auto_apollo_chunk_size": 19,
+            "auto_apollo_overlap": 2,
+            "auto_apollo_method": "normal_method",
+            "auto_apollo_normal_model": "Apollo Universal Model",
+            "auto_apollo_midside_model": "Apollo Universal Model",
             "apollo_chunk_size": 19,
             "apollo_overlap": 2,
             "apollo_method": "normal_method",
@@ -81,27 +89,25 @@ def update_favorites(favorites, model, add=True):
         new_favorites.remove(cleaned_model)
     return new_favorites
 
-def save_preset(presets, preset_name, models, ensemble_method, manual_ensemble_type, manual_weights, **kwargs):
+def save_preset(presets, preset_name, models, ensemble_method, **kwargs):
     """Save a preset."""
     new_presets = presets.copy()
     cleaned_models = [clean_model(model) for model in models]
     new_presets[preset_name] = {
         "models": cleaned_models,
         "ensemble_method": ensemble_method,
-        "manual_ensemble_type": manual_ensemble_type,
-        "manual_weights": manual_weights,
         "chunk_size": kwargs.get("chunk_size", load_config()["settings"]["chunk_size"]),
         "overlap": kwargs.get("overlap", load_config()["settings"]["overlap"]),
-        "use_tta": kwargs.get("use_tta", load_config()["settings"]["use_tta"]),
-        "extract_instrumental": kwargs.get("extract_instrumental", load_config()["settings"]["extract_instrumental"]),
+        "auto_use_tta": kwargs.get("auto_use_tta", load_config()["settings"]["auto_use_tta"]),
+        "auto_extract_instrumental": kwargs.get("auto_extract_instrumental", load_config()["settings"]["auto_extract_instrumental"]),
         "use_apollo": kwargs.get("use_apollo", load_config()["settings"]["use_apollo"]),
-        "apollo_chunk_size": kwargs.get("apollo_chunk_size", load_config()["settings"]["apollo_chunk_size"]),
-        "apollo_overlap": kwargs.get("apollo_overlap", load_config()["settings"]["apollo_overlap"]),
-        "apollo_method": kwargs.get("apollo_method", load_config()["settings"]["apollo_method"]),
-        "apollo_normal_model": kwargs.get("apollo_normal_model", load_config()["settings"]["apollo_normal_model"]),
-        "apollo_midside_model": kwargs.get("apollo_midside_model", load_config()["settings"]["apollo_midside_model"]),
-        "use_matchering": kwargs.get("use_matchering", load_config()["settings"]["use_matchering"]),
-        "matchering_passes": kwargs.get("matchering_passes", load_config()["settings"]["matchering_passes"]),
+        "auto_apollo_chunk_size": kwargs.get("auto_apollo_chunk_size", load_config()["settings"]["auto_apollo_chunk_size"]),
+        "auto_apollo_overlap": kwargs.get("auto_apollo_overlap", load_config()["settings"]["auto_apollo_overlap"]),
+        "auto_apollo_method": kwargs.get("auto_apollo_method", load_config()["settings"]["auto_apollo_method"]),
+        "auto_apollo_normal_model": kwargs.get("auto_apollo_normal_model", load_config()["settings"]["auto_apollo_normal_model"]),
+        "auto_apollo_midside_model": kwargs.get("auto_apollo_midside_model", load_config()["settings"]["auto_apollo_midside_model"]),
+        "auto_use_matchering": kwargs.get("use_matchering", load_config()["settings"]["use_matchering"]),
+        "auto_matchering_passes": kwargs.get("matchering_passes", load_config()["settings"]["matchering_passes"]),
         "auto_category": kwargs.get("auto_category", load_config()["settings"]["auto_category"])
     }
     return new_presets
