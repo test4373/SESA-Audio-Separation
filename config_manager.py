@@ -1,19 +1,15 @@
-from helpers import clean_model
-import json
 import os
-import logging
+import json
+from pathlib import Path
 
-# Set up logging (errors only)
-logging.basicConfig(level=logging.ERROR, format="%(asctime)s - %(levelname)s - %(message)s")
-logger = logging.getLogger(__name__)
-
-# Config path in Google Drive
-CONFIG_FILE = "/content/drive/MyDrive/SESA-Audio-Separation/user_config.json"
+# Define config directory in Google Drive
+CONFIG_DIR = "/content/drive/MyDrive/SESA-Config"
+CONFIG_FILE = os.path.join(CONFIG_DIR, "config.json")
 
 def load_config():
+    """Load configuration from config.json."""
     default_config = {
         "favorites": [],
-        "presets": {},
         "settings": {
             "chunk_size": 352800,
             "overlap": 2,
@@ -21,53 +17,63 @@ def load_config():
             "use_tta": False,
             "use_demud_phaseremix_inst": False,
             "extract_instrumental": False,
-            "use_apollo": False,
+            "use_apollo": True,
             "apollo_chunk_size": 19,
             "apollo_overlap": 2,
             "apollo_method": "normal_method",
             "apollo_normal_model": "Apollo Universal Model",
             "apollo_midside_model": "Apollo Universal Model",
+            "use_matchering": False,
+            "matchering_passes": 1,
             "model_category": "Vocal Models",
             "selected_model": None,
+            "auto_category": "Vocal Models",
+            "selected_models": [],
             "auto_ensemble_type": "avg_wave",
-            "auto_category": "Vocal Models",  # Already added from previous fix
-            "selected_models": []  # Add this line
-        }
+            "manual_ensemble_type": "avg_wave",
+            "manual_weights": ""
+        },
+        "presets": {}
     }
-    try:
-        if os.path.exists(CONFIG_FILE):
-            with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-                config = json.load(f)
-                # Ensure all default keys exist
-                for key, value in default_config.items():
-                    if key not in config:
-                        config[key] = value
-                # Ensure all settings keys exist
-                for key, value in default_config["settings"].items():
-                    if key not in config["settings"]:
-                        config["settings"][key] = value
-                return config
+
+    os.makedirs(CONFIG_DIR, exist_ok=True)
+    if not os.path.exists(CONFIG_FILE):
+        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+            json.dump(default_config, f, indent=2)
         return default_config
-    except Exception as e:
-        print(f"Error loading config: {e}")
+
+    try:
+        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+            config = json.load(f)
+        # Merge with default config to ensure all keys exist
+        for key, value in default_config.items():
+            if key not in config:
+                config[key] = value
+            elif isinstance(value, dict):
+                for subkey, subvalue in value.items():
+                    if subkey not in config[key]:
+                        config[key][subkey] = subvalue
+        return config
+    except json.JSONDecodeError:
+        print("Warning: config.json is corrupted. Creating a new one.")
+        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+            json.dump(default_config, f, indent=2)
         return default_config
 
 def save_config(favorites, settings, presets):
+    """Save configuration to config.json."""
     config = {
         "favorites": favorites,
         "settings": settings,
         "presets": presets
     }
-    try:
-        os.makedirs(os.path.dirname(CONFIG_FILE), exist_ok=True)
-        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-            json.dump(config, f, indent=4, ensure_ascii=False)
-        print("Config saved successfully.")
-    except Exception as e:
-        print(f"Error saving config: {e}")
+    os.makedirs(CONFIG_DIR, exist_ok=True)
+    with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+        json.dump(config, f, indent=2)
 
 def update_favorites(favorites, model, add=True):
-    cleaned_model = clean_model(model)
+    """Update favorites list."""
+    cleaned_model = model
     new_favorites = favorites.copy()
     if add and cleaned_model not in new_favorites:
         new_favorites.append(cleaned_model)
@@ -75,31 +81,38 @@ def update_favorites(favorites, model, add=True):
         new_favorites.remove(cleaned_model)
     return new_favorites
 
-def save_preset(presets, preset_name, models, ensemble_method):
-    if not preset_name:
-        print("Preset name cannot be empty.")
-        return presets
-    if not models:
-        print("No models selected.")
-        return presets
-    
-    # Include starred models from favorites
-    config = load_config()
-    favorites = config["favorites"]
-    # Combine selected models and favorites, remove duplicates
-    combined_models = list(set([clean_model(model) for model in models] + favorites))
-    
+def save_preset(presets, preset_name, models, ensemble_method, manual_ensemble_type, manual_weights, **kwargs):
+    """Save a preset."""
     new_presets = presets.copy()
+    cleaned_models = [clean_model(model) for model in models]
     new_presets[preset_name] = {
-        "models": combined_models,
-        "ensemble_method": ensemble_method
+        "models": cleaned_models,
+        "ensemble_method": ensemble_method,
+        "manual_ensemble_type": manual_ensemble_type,
+        "manual_weights": manual_weights,
+        "chunk_size": kwargs.get("chunk_size", load_config()["settings"]["chunk_size"]),
+        "overlap": kwargs.get("overlap", load_config()["settings"]["overlap"]),
+        "use_tta": kwargs.get("use_tta", load_config()["settings"]["use_tta"]),
+        "extract_instrumental": kwargs.get("extract_instrumental", load_config()["settings"]["extract_instrumental"]),
+        "use_apollo": kwargs.get("use_apollo", load_config()["settings"]["use_apollo"]),
+        "apollo_chunk_size": kwargs.get("apollo_chunk_size", load_config()["settings"]["apollo_chunk_size"]),
+        "apollo_overlap": kwargs.get("apollo_overlap", load_config()["settings"]["apollo_overlap"]),
+        "apollo_method": kwargs.get("apollo_method", load_config()["settings"]["apollo_method"]),
+        "apollo_normal_model": kwargs.get("apollo_normal_model", load_config()["settings"]["apollo_normal_model"]),
+        "apollo_midside_model": kwargs.get("apollo_midside_model", load_config()["settings"]["apollo_midside_model"]),
+        "use_matchering": kwargs.get("use_matchering", load_config()["settings"]["use_matchering"]),
+        "matchering_passes": kwargs.get("matchering_passes", load_config()["settings"]["matchering_passes"]),
+        "auto_category": kwargs.get("auto_category", load_config()["settings"]["auto_category"])
     }
-    print(f"Preset '{preset_name}' saved with models: {combined_models}, method: {ensemble_method}")
     return new_presets
 
 def delete_preset(presets, preset_name):
+    """Delete a preset."""
     new_presets = presets.copy()
     if preset_name in new_presets:
         del new_presets[preset_name]
-        print(f"Preset '{preset_name}' deleted.")
     return new_presets
+
+def clean_model(model):
+    """Remove ⭐ from model name if present."""
+    return model.replace(" ⭐", "") if isinstance(model, str) else model
