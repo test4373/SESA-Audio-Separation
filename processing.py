@@ -46,6 +46,8 @@ warnings.filterwarnings("ignore")
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 INFERENCE_PATH = os.path.join(BASE_DIR, "inference.py")
 ENSEMBLE_PATH = os.path.join(BASE_DIR, "ensemble.py")
+AUTO_ENSEMBLE_OUTPUT = "/content/drive/MyDrive/ensemble_output"
+
 if IS_COLAB:
     OUTPUT_DIR = '/content/drive/MyDrive/!output_file'  # Google Drive, appears at the top
 else:
@@ -499,6 +501,7 @@ def ensemble_audio_fn(files, method, weights, progress=gr.Progress()):
     finally:
         progress(100, desc="Ensemble process completed")
 
+
 def auto_ensemble_process(
     auto_input_audio_file,
     selected_models,
@@ -516,21 +519,23 @@ def auto_ensemble_process(
     auto_apollo_method="normal_method",
     auto_use_matchering=False,
     auto_matchering_passes=1,
-    progress=gr.Progress(track_tqdm=True),
-    *args,
-    **kwargs
+    apollo_midside_model=None,
+    progress=gr.Progress(track_tqdm=True)
 ):
+    """Process audio with multiple models and ensemble the results, saving output to Google Drive."""
     try:
-        # Check Google Drive connection
+        # Check Google Drive connection and setup directories
         setup_directories()
 
         if not selected_models or len(selected_models) < 1:
-            yield None, "No models selected", update_progress_html("Error occurred", 0)
+            yield None, i18n("no_models_selected"), update_progress_html(i18n("error_occurred"), 0)
+            return
 
         if auto_input_audio_file is None:
             existing_files = os.listdir(INPUT_DIR)
             if not existing_files:
-                yield None, "No input audio provided", update_progress_html("Error occurred", 0)
+                yield None, i18n("no_input_audio_provided"), update_progress_html(i18n("error_occurred"), 0)
+            return
             audio_path = os.path.join(INPUT_DIR, existing_files[0])
         else:
             audio_path = auto_input_audio_file.name if hasattr(auto_input_audio_file, 'name') else auto_input_audio_file
@@ -541,10 +546,10 @@ def auto_ensemble_process(
         shutil.copy(audio_path, dest_path)
         print(f"Input file copied: {dest_path}")
 
-        print(f"Raw UI inputs - auto_apollo_chunk_size: {auto_apollo_chunk_size}, auto_apollo_overlap: {auto_apollo_overlap}")
-        if auto_apollo_method == "2" or auto_apollo_method == 2:
+        # Parse apollo method
+        if auto_apollo_method in ["2", 2]:
             auto_apollo_method = "mid_side_method"
-        elif auto_apollo_method == "1" or auto_apollo_method == 1:
+        elif auto_apollo_method in ["1", 1]:
             auto_apollo_method = "normal_method"
         print(f"Parsed auto_apollo_method: {auto_apollo_method}")
 
@@ -552,11 +557,10 @@ def auto_ensemble_process(
         corrected_auto_overlap = int(auto_apollo_overlap)
         print(f"Corrected values - auto_apollo_chunk_size: {corrected_auto_chunk_size}, auto_apollo_overlap: {corrected_auto_overlap}")
 
+        # Setup temporary directories
         auto_ensemble_temp = os.path.join(BASE_DIR, "auto_ensemble_temp")
         os.makedirs(auto_ensemble_temp, exist_ok=True)
-        os.makedirs(AUTO_ENSEMBLE_OUTPUT, exist_ok=True)
         clear_directory(auto_ensemble_temp)
-        clear_directory(AUTO_ENSEMBLE_OUTPUT)
 
         all_outputs = []
         total_models = len(selected_models)
@@ -564,15 +568,15 @@ def auto_ensemble_process(
         model_progress_per_step = model_progress_range / total_models if total_models > 0 else 0
 
         for i, model in enumerate(selected_models):
-            clean_model_name = clean_model(model)  # Remove ⭐
+            clean_model_name = clean_model(model)
             print(f"Processing model {i+1}/{total_models}: Original={model}, Cleaned={clean_model_name}")
             model_output_dir = os.path.join(auto_ensemble_temp, clean_model_name)
             os.makedirs(model_output_dir, exist_ok=True)
 
             current_progress = i * model_progress_per_step
             current_progress = clamp_percentage(current_progress)
-            yield None, f"Loading model {i+1}/{total_models}: {clean_model_name}", update_progress_html(
-                f"Loading model {i+1}/{total_models}: {clean_model_name} ({current_progress}%)",
+            yield None, i18n("loading_model").format(i+1, total_models, clean_model_name), update_progress_html(
+                i18n("loading_model_progress").format(i+1, total_models, clean_model_name, current_progress),
                 current_progress
             )
 
@@ -614,8 +618,8 @@ def auto_ensemble_process(
                         model_percentage = (percentage / 100) * model_progress_per_step
                         current_progress = (i * model_progress_per_step) + model_percentage
                         current_progress = clamp_percentage(current_progress)
-                        yield None, f"Loading model {i+1}/{total_models}: {clean_model_name}", update_progress_html(
-                            f"Loading model {i+1}/{total_models}: {clean_model_name} ({current_progress}%)",
+                        yield None, i18n("loading_model").format(i+1, total_models, clean_model_name), update_progress_html(
+                            i18n("loading_model_progress").format(i+1, total_models, clean_model_name, current_progress),
                             current_progress
                         )
                     except (AttributeError, ValueError) as e:
@@ -628,8 +632,8 @@ def auto_ensemble_process(
             process.wait()
             if process.returncode != 0:
                 print(f"Error: {stderr_output}")
-                yield None, f"Model failed: {clean_model_name}: {stderr_output}", update_progress_html(
-                    "Error occurred", 0
+                yield None, i18n("model_failed").format(clean_model_name, stderr_output), update_progress_html(
+                    i18n("error_occurred"), 0
                 )
                 return
 
@@ -639,33 +643,30 @@ def auto_ensemble_process(
 
             current_progress = (i + 1) * model_progress_per_step
             current_progress = clamp_percentage(current_progress)
-            yield None, f"Completed model {i+1}/{total_models}: {clean_model_name}", update_progress_html(
-                f"Completed model {i+1}/{total_models}: {clean_model_name} ({current_progress}%)",
+            yield None, i18n("completed_model").format(i+1, total_models, clean_model_name), update_progress_html(
+                i18n("completed_model_progress").format(i+1, total_models, clean_model_name, current_progress),
                 current_progress
             )
 
             model_outputs = glob.glob(os.path.join(model_output_dir, "*.wav"))
             if not model_outputs:
-                raise FileNotFoundError(f"Model output failed: {clean_model_name}")
+                raise FileNotFoundError(i18n("model_output_failed").format(clean_model_name))
             all_outputs.extend(model_outputs)
 
-        # Select compatible files for ensemble (e.g., all 'instrumental' or 'vocals')
+        # Select compatible files for ensemble
         preferred_type = 'instrumental' if auto_extract_instrumental else 'vocals'
-        ensemble_files = []
-        for output in all_outputs:
-            if preferred_type.lower() in output.lower():
-                ensemble_files.append(output)
+        ensemble_files = [output for output in all_outputs if preferred_type.lower() in output.lower()]
         print(f"Selected ensemble files: {ensemble_files}")
         if len(ensemble_files) < 2:
             print(f"Warning: Insufficient {preferred_type} files ({len(ensemble_files)}). Falling back to all outputs.")
             ensemble_files = all_outputs
             if len(ensemble_files) < 2:
-                raise ValueError(f"Insufficient files for ensemble: {len(ensemble_files)}")
+                raise ValueError(i18n("insufficient_files_for_ensemble").format(len(ensemble_files)))
 
         # Enhanced outputs with Apollo (if enabled)
         if auto_use_apollo:
-            yield None, f"Enhancing with Apollo: 0/{len(all_outputs)}", update_progress_html(
-                "Waiting for files", 60
+            yield None, i18n("enhancing_with_apollo").format(0, len(all_outputs)), update_progress_html(
+                i18n("waiting_for_files"), 60
             )
 
             all_outputs = process_with_apollo(
@@ -675,21 +676,21 @@ def auto_ensemble_process(
                 apollo_overlap=corrected_auto_overlap,
                 apollo_method=auto_apollo_method,
                 apollo_normal_model=auto_apollo_normal_model,
-                apollo_midside_model=None,  # Not used in auto_ensemble
+                apollo_midside_model=apollo_midside_model,
                 output_format=export_format.split()[0].lower(),
                 progress=progress,
                 total_progress_start=60,
                 total_progress_end=90
             )
 
-        # Allocate 10% for ensemble (90-100%)
-        yield None, "Performing ensemble", update_progress_html(
-            "Performing ensemble", 90
+        # Perform ensemble
+        yield None, i18n("performing_ensemble"), update_progress_html(
+            i18n("performing_ensemble"), 90
         )
 
         quoted_files = [f'"{f}"' for f in ensemble_files]
-        timestamp = str(int(time.time()))
-        output_path = os.path.join(AUTO_ENSEMBLE_OUTPUT, f"ensemble_{timestamp}.wav")
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        output_path = os.path.join(AUTO_ENSEMBLE_OUTPUT, f"auto_ensemble_output_{timestamp}.wav")
 
         ensemble_cmd = [
             "python", ENSEMBLE_PATH,
@@ -698,7 +699,6 @@ def auto_ensemble_process(
             "--output", f'"{output_path}"'
         ]
 
-        print(f"Memory usage before ensemble: {psutil.virtual_memory().percent}%")
         print(f"Running ensemble command: {' '.join(ensemble_cmd)}")
         process = subprocess.Popen(
             " ".join(ensemble_cmd),
@@ -711,15 +711,14 @@ def auto_ensemble_process(
         )
 
         start_time = time.time()
-        total_estimated_time = 10.0  # Adjust based on actual ensemble duration
+        total_estimated_time = 10.0
         elapsed_time = 0
         while elapsed_time < total_estimated_time:
             elapsed_time = time.time() - start_time
-            # Scale progress between 90-98%
             progress_value = 90 + ((elapsed_time / total_estimated_time) * 8)
             progress_value = clamp_percentage(progress_value)
-            yield None, "Performing ensemble", update_progress_html(
-                f"Ensembling progress: {progress_value}%",
+            yield None, i18n("performing_ensemble"), update_progress_html(
+                i18n("ensembling_progress").format(progress_value),
                 progress_value
             )
             time.sleep(0.1)
@@ -736,26 +735,24 @@ def auto_ensemble_process(
         process.wait()
         if process.returncode != 0:
             print(f"Error: {stderr_output}")
-            yield None, f"Error: {stderr_output}", update_progress_html(
-                "Error occurred", 0
+            yield None, i18n("ensemble_error").format(stderr_output), update_progress_html(
+                i18n("error_occurred"), 0
             )
             return
 
-        print(f"Memory usage after ensemble: {psutil.virtual_memory().percent}%")
-
-        # Apply Matchering to ensemble output
+        # Apply Matchering (if enabled)
         if auto_use_matchering and os.path.exists(output_path):
-            yield None, "Applying Matchering", update_progress_html(
-                "Applying Matchering", 98
+            yield None, i18n("applying_matchering"), update_progress_html(
+                i18n("applying_matchering"), 98
             )
 
-            # Find clean segment
+            # Find clean segment (placeholder)
             segment_start, segment_end, segment_audio = find_clear_segment(audio_path)
             segment_path = os.path.join(tempfile.gettempdir(), "matchering_segment.wav")
             save_segment(segment_audio, 44100, segment_path)
 
             # Master the ensemble output
-            mastered_output_path = os.path.join(AUTO_ENSEMBLE_OUTPUT, f"ensemble_{timestamp}_mastered.wav")
+            mastered_output_path = os.path.join(AUTO_ENSEMBLE_OUTPUT, f"auto_ensemble_output_{timestamp}_mastered.wav")
             run_matchering(
                 reference_path=segment_path,
                 target_path=output_path,
@@ -770,23 +767,23 @@ def auto_ensemble_process(
 
             output_path = mastered_output_path
 
-        yield None, "Finalizing ensemble output", update_progress_html(
-            "Finalizing ensemble output", 98
+        yield None, i18n("finalizing_ensemble_output"), update_progress_html(
+            i18n("finalizing_ensemble_output"), 98
         )
 
         if not os.path.exists(output_path):
-            raise RuntimeError(f"Ensemble file creation failed: {output_path}")
+            raise RuntimeError(i18n("ensemble_file_creation_failed").format(output_path))
 
-        yield output_path, "Success: Output created", update_progress_html(
-            "Ensemble completed", 100
+        yield output_path, i18n("success_output_created"), update_progress_html(
+            i18n("ensemble_completed"), 100
         )
 
     except Exception as e:
         print(f"auto_ensemble_process error: {str(e)}")
         import traceback
         traceback.print_exc()
-        yield None, f"Error: {str(e)}", update_progress_html(
-            "Error occurred", 0
+        yield None, i18n("error").format(str(e)), update_progress_html(
+            i18n("error_occurred"), 0
         )
     finally:
         shutil.rmtree(auto_ensemble_temp, ignore_errors=True)
