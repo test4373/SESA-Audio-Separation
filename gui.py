@@ -747,15 +747,7 @@ def create_interface():
                             placeholder=i18n("waiting_for_processing"),
                             visible=False
                         )
-                        ensemble_copy_to_drive_btn = gr.Button(i18n("copy_to_drive"), variant="secondary")
-                        ensemble_copy_status = gr.Textbox(
-                            label=i18n("ensemble_copy_status"),
-                            interactive=False,
-                            placeholder=i18n("ensemble_copy_status"),
-                            visible=True
-                        )
-                        guidelines = gr.Markdown(i18n("guidelines"))
-
+                        
             with gr.Tab(i18n("download_sources_tab"), id="download_tab"):
                 with gr.Row():
                     with gr.Column():
