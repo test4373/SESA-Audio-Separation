@@ -275,5 +275,7 @@
   "matchering_completed": "✅ Matchering processing completed!",
   "matchering_error": "❌ Error during Matchering: {}",
   "invalid_method": "Error: Invalid method! Use 'gradio', 'localtunnel', or 'ngrok'.",
-  "language_changed_message": "Language changed. please restart the cell."
+    "language_changed_message": "Language changed. please restart the cell.",
+  "backend_settings": "🚀 Backend Settings",
+  "inference_backend": "Inference Backend"
 }

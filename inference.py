@@ -36,6 +36,13 @@ try:
 except ImportError:
     TENSORRT_SUPPORTED = False
 
+# PyTorch optimized backend (always available)
+try:
+    from pytorch_backend import PyTorchBackend
+    PYTORCH_OPTIMIZED_AVAILABLE = True
+except ImportError:
+    PYTORCH_OPTIMIZED_AVAILABLE = False
+
 import warnings
 warnings.filterwarnings("ignore")
 
@@ -177,6 +184,8 @@ def proc_folder(args, use_tensorrt=False):
     parser.add_argument("--overlap", type=int, default=4, help="Inference overlap factor")
     parser.add_argument("--use_tensorrt", action='store_true', help="Use TensorRT backend (requires TensorRT)")
     parser.add_argument("--tensorrt_precision", type=str, choices=['fp32', 'fp16'], default='fp16', help="TensorRT precision")
+    parser.add_argument("--use_pytorch_optimized", action='store_true', help="Use optimized PyTorch backend")
+    parser.add_argument("--optimize_mode", type=str, choices=['default', 'compile', 'jit', 'channels_last'], default='default', help="PyTorch optimization mode")
 
     if args is None:
         args = parser.parse_args()
@@ -211,8 +220,10 @@ def proc_folder(args, use_tensorrt=False):
 
     print(i18n("model_load_time").format(time.time() - model_load_start_time))
 
-    # Check if TensorRT should be used
+    # Check which backend to use
     use_trt = args.use_tensorrt or use_tensorrt
+    use_pytorch_opt = args.use_pytorch_optimized
+    
     if use_trt and TENSORRT_SUPPORTED:
         print("\n🚀 TensorRT backend is available and will be used for acceleration")
         print("   To use standard PyTorch inference, remove --use_tensorrt flag")
@@ -229,6 +240,22 @@ def proc_folder(args, use_tensorrt=False):
                 else:
                     sys.argv.extend([f"--{key}", str(value)])
         proc_folder_tensorrt(None)
+    elif use_pytorch_opt and PYTORCH_OPTIMIZED_AVAILABLE:
+        print(f"\n🔥 Using optimized PyTorch backend (mode: {args.optimize_mode})")
+        print("   To use standard inference, remove --use_pytorch_optimized flag")
+        from inference_pytorch import proc_folder_pytorch_optimized
+        # Recreate args for optimized PyTorch inference
+        sys.argv = sys.argv[:1]  # Keep only script name
+        for key, value in vars(args).items():
+            if value is not None and value is not False:
+                if isinstance(value, bool):
+                    sys.argv.append(f"--{key}")
+                elif isinstance(value, list):
+                    sys.argv.append(f"--{key}")
+                    sys.argv.extend(map(str, value))
+                else:
+                    sys.argv.extend([f"--{key}", str(value)])
+        proc_folder_pytorch_optimized(None)
     else:
         if use_trt and not TENSORRT_SUPPORTED:
             print("\n⚠️  TensorRT backend requested but not available")

@@ -23,6 +23,13 @@ try:
     TENSORRT_SUPPORTED = is_tensorrt_available()
 except ImportError:
     TENSORRT_SUPPORTED = False
+
+# PyTorch optimized backend (always available)
+try:
+    from pytorch_backend import PyTorchBackend
+    PYTORCH_OPTIMIZED_AVAILABLE = True
+except ImportError:
+    PYTORCH_OPTIMIZED_AVAILABLE = False
 import yaml
 import gradio as gr
 import threading
@@ -167,11 +174,15 @@ def run_command_and_process_files(
             apollo_chunk_size = 19
             apollo_overlap = 2
 
-        # Check if TensorRT should be used
+        # Check which backend to use
         if use_tensorrt and TENSORRT_SUPPORTED:
             from inference_tensorrt import INFERENCE_PATH as TRT_INFERENCE_PATH
             inference_script = TRT_INFERENCE_PATH if os.path.exists(TRT_INFERENCE_PATH) else INFERENCE_PATH
             print(f"🚀 Using TensorRT backend with {tensorrt_precision} precision")
+        elif use_pytorch_optimized and PYTORCH_OPTIMIZED_AVAILABLE:
+            from inference_pytorch import INFERENCE_PATH as PYTORCH_INFERENCE_PATH
+            inference_script = PYTORCH_INFERENCE_PATH if os.path.exists(PYTORCH_INFERENCE_PATH) else INFERENCE_PATH
+            print(f"🔥 Using optimized PyTorch backend (mode: {optimize_mode})")
         else:
             inference_script = INFERENCE_PATH
             if use_tensorrt and not TENSORRT_SUPPORTED:
@@ -189,11 +200,18 @@ def run_command_and_process_files(
             "--export_format", f"{output_format} FLOAT"
         ]
         
-        # Add TensorRT specific arguments
+        # Add backend-specific arguments
         if use_tensorrt and TENSORRT_SUPPORTED:
             cmd_parts.extend([
                 "--tensorrt_precision", tensorrt_precision,
                 "--use_tensorrt_cache"
+            ])
+        elif use_pytorch_optimized and PYTORCH_OPTIMIZED_AVAILABLE:
+            cmd_parts.extend([
+                "--optimize_mode", optimize_mode,
+                "--enable_amp",
+                "--enable_tf32",
+                "--enable_cudnn_benchmark"
             ])
         
         if extract_instrumental:
@@ -333,6 +351,8 @@ def process_audio(
     matchering_passes=1,
     use_tensorrt=False,
     tensorrt_precision='fp16',
+    use_pytorch_optimized=False,
+    optimize_mode='default',
     progress=gr.Progress(track_tqdm=True),
     *args,
     **kwargs

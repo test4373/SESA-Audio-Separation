@@ -295,7 +295,9 @@
   "matchering_info": "Ses masteringini ve dengesini iyileştirmek için Matchering uygula",
   "matchering_passes": "Matchering Geçişleri",
   "matchering_passes_info": "Matchering yineleme sayısı (1-5, yüksek değerler kaliteyi artırır ancak daha uzun sürer)",
-  "matchering_processing": "Matchering uygulanıyor... ({:.1f}%)",
+    "matchering_processing": "Matchering uygulanıyor... ({:.1f}%)",
   "matchering_completed": "✅ Matchering işlemi tamamlandı!",
-  "matchering_error": "❌ Matchering sırasında hata: {}"
+  "matchering_error": "❌ Matchering sırasında hata: {}",
+  "backend_settings": "🚀 Backend Ayarları",
+  "inference_backend": "Inference Backend"
 }
