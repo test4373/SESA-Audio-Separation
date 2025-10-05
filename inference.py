@@ -29,13 +29,6 @@ sys.path.append(current_dir)
 from utils import demix, get_model_from_config, normalize_audio, denormalize_audio
 from utils import prefer_target_instrument, apply_tta, load_start_checkpoint, load_lora_weights
 
-# TensorRT backend import (optional)
-try:
-    from tensorrt_backend import is_tensorrt_available
-    TENSORRT_SUPPORTED = is_tensorrt_available()
-except ImportError:
-    TENSORRT_SUPPORTED = False
-
 # PyTorch optimized backend (always available)
 try:
     from pytorch_backend import PyTorchBackend
@@ -182,8 +175,6 @@ def proc_folder(args, use_tensorrt=False):
     parser.add_argument("--lora_checkpoint", type=str, default='', help=i18n("lora_checkpoint_help"))
     parser.add_argument("--chunk_size", type=int, default=1000000, help="Inference chunk size")
     parser.add_argument("--overlap", type=int, default=4, help="Inference overlap factor")
-    parser.add_argument("--use_tensorrt", action='store_true', help="Use TensorRT backend (requires TensorRT)")
-    parser.add_argument("--tensorrt_precision", type=str, choices=['fp32', 'fp16'], default='fp16', help="TensorRT precision")
     parser.add_argument("--use_pytorch_optimized", action='store_true', help="Use optimized PyTorch backend")
     parser.add_argument("--optimize_mode", type=str, choices=['default', 'compile', 'jit', 'channels_last'], default='default', help="PyTorch optimization mode")
 
@@ -221,26 +212,9 @@ def proc_folder(args, use_tensorrt=False):
     print(i18n("model_load_time").format(time.time() - model_load_start_time))
 
     # Check which backend to use
-    use_trt = args.use_tensorrt or use_tensorrt
     use_pytorch_opt = args.use_pytorch_optimized
     
-    if use_trt and TENSORRT_SUPPORTED:
-        print("\n🚀 TensorRT backend is available and will be used for acceleration")
-        print("   To use standard PyTorch inference, remove --use_tensorrt flag")
-        from inference_tensorrt import proc_folder_tensorrt
-        # Recreate args for TensorRT inference
-        sys.argv = sys.argv[:1]  # Keep only script name
-        for key, value in vars(args).items():
-            if value is not None and value is not False:
-                if isinstance(value, bool):
-                    sys.argv.append(f"--{key}")
-                elif isinstance(value, list):
-                    sys.argv.append(f"--{key}")
-                    sys.argv.extend(map(str, value))
-                else:
-                    sys.argv.extend([f"--{key}", str(value)])
-        proc_folder_tensorrt(None)
-    elif use_pytorch_opt and PYTORCH_OPTIMIZED_AVAILABLE:
+    if use_pytorch_opt and PYTORCH_OPTIMIZED_AVAILABLE:
         print(f"\n🔥 Using optimized PyTorch backend (mode: {args.optimize_mode})")
         print("   To use standard inference, remove --use_pytorch_optimized flag")
         from inference_pytorch import proc_folder_pytorch_optimized
@@ -257,10 +231,6 @@ def proc_folder(args, use_tensorrt=False):
                     sys.argv.extend([f"--{key}", str(value)])
         proc_folder_pytorch_optimized(None)
     else:
-        if use_trt and not TENSORRT_SUPPORTED:
-            print("\n⚠️  TensorRT backend requested but not available")
-            print("   Install with: pip install torch2trt nvidia-tensorrt")
-            print("   Falling back to standard PyTorch inference\n")
         run_folder(model, args, config, device, verbose=False)
 
 if __name__ == "__main__":

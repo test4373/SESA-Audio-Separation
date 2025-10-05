@@ -64,61 +64,6 @@ else:
 os.makedirs(AUTO_ENSEMBLE_OUTPUT, exist_ok=True)
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-def setup_isolated_python():
-    """Setup isolated Python for TensorRT with all requirements."""
-    isolated_python = os.path.join(BASE_DIR, "python/bin/python3")
-    isolated_pip = os.path.join(BASE_DIR, "python/bin/pip3")
-    
-    if not os.path.exists(isolated_python):
-        return False
-    
-    # Check if requirements are already installed
-    check_file = os.path.join(BASE_DIR, "python/.requirements_installed")
-    if os.path.exists(check_file):
-        return True
-    
-    print("\n🔧 Setting up isolated Python environment for TensorRT...")
-    print("   This will take a few minutes (only runs once)\n")
-    
-    try:
-        # Install requirements in isolated Python
-        requirements_path = os.path.join(BASE_DIR, "requirements.txt")
-        
-        if os.path.exists(requirements_path):
-            print("   Installing requirements...")
-            result = subprocess.run(
-                [isolated_pip, "install", "-q", "-r", requirements_path],
-                capture_output=True,
-                text=True,
-                timeout=1800  # 30 minutes
-            )
-            
-            if result.returncode != 0:
-                print(f"   ⚠️  Warning: Some packages failed to install: {result.stderr[:200]}")
-            else:
-                print("   ✅ Requirements installed successfully")
-        
-        # Install TensorRT-specific packages
-        print("   Installing TensorRT packages...")
-        subprocess.run(
-            [isolated_pip, "install", "-q", "torch2trt"],
-            capture_output=True,
-            text=True,
-            timeout=600
-        )
-        
-        # Mark as installed
-        with open(check_file, 'w') as f:
-            f.write('installed')
-        
-        print("   ✅ Isolated Python setup complete!\n")
-        return True
-        
-    except Exception as e:
-        print(f"   ⚠️  Setup failed: {e}")
-        return False
-
-
 def setup_directories():
     """Create necessary directories and check Google Drive access."""
     if IS_COLAB:
@@ -224,15 +169,15 @@ def run_command_and_process_files(
             apollo_chunk_size = 19
             apollo_overlap = 2
 
-        # Check which backend to use
+                # Check which backend to use
+        python_exe = "python"
+        
         if use_pytorch_optimized and PYTORCH_OPTIMIZED_AVAILABLE:
             from inference_pytorch import INFERENCE_PATH as PYTORCH_INFERENCE_PATH
             inference_script = PYTORCH_INFERENCE_PATH if os.path.exists(PYTORCH_INFERENCE_PATH) else INFERENCE_PATH
             print(f"🔥 Using optimized PyTorch backend (mode: {optimize_mode})")
-            python_exe = "python"
         else:
             inference_script = INFERENCE_PATH
-            python_exe = "python"
         
         cmd_parts = [
             python_exe, inference_script,
@@ -262,13 +207,7 @@ def run_command_and_process_files(
         if demud_phaseremix_inst:
             cmd_parts.append("--demud_phaseremix_inst")
 
-        print(f"Running command: {' '.join(cmd_parts)}")
-        
-        # Prepare environment for isolated Python
-        env = os.environ.copy()
-        if python_exe.endswith('python/bin/python3'):
-            # Fix matplotlib backend for isolated Python
-            env['MPLBACKEND'] = 'Agg'
+                print(f"Running command: {' '.join(cmd_parts)}")
         
         try:
             process = subprocess.run(
@@ -277,8 +216,7 @@ def run_command_and_process_files(
                 capture_output=True,
                 text=True,
                 check=True,
-                timeout=3600,  # 1 hour timeout
-                env=env
+                timeout=3600  # 1 hour timeout
             )
         except subprocess.CalledProcessError as e:
             # If TensorRT fails, fallback to PyTorch

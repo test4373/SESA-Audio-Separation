@@ -24,6 +24,14 @@ import shutil
 import json
 from tqdm import tqdm
 import time
+import torch
+
+# PyTorch optimizations
+if torch.cuda.is_available():
+    torch.backends.cudnn.benchmark = True
+    print("✓ Using CUDA acceleration for ensemble")
+else:
+    print("Using CPU for ensemble")
 
 class AudioEnsembleEngine:
     def __init__(self):
