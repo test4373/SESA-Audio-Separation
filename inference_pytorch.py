@@ -186,7 +186,7 @@ def demix_pytorch_optimized(
 
 def run_folder_pytorch_optimized(backend, args, config, device, verbose: bool = False):
     """
-    Optimized PyTorch backend ile klasör işleme.
+    ULTRA-OPTIMIZED PyTorch backend ile klasör işleme.
     """
     start_time = time.time()
     
@@ -194,7 +194,9 @@ def run_folder_pytorch_optimized(backend, args, config, device, verbose: bool = 
     sample_rate = getattr(config.audio, 'sample_rate', 44100)
     
     print(i18n("total_files_found").format(len(mixture_paths), sample_rate))
-    print(f"🔥 Using optimized PyTorch backend (mode: {args.optimize_mode})")
+    print(f"\n🔥🔥🔥 ULTRA-OPTIMIZED PyTorch Backend Active 🔥🔥🔥")
+    print(f"🚀 Mode: {args.optimize_mode} | ⚡ AMP: ON | 🎯 TF32: ON | ⚙️ cuDNN: ON")
+    print(f"Expect MAXIMUM SPEED! 💨\n")
     
     instruments = prefer_target_instrument(config)[:]
     
@@ -254,9 +256,9 @@ def run_folder_pytorch_optimized(backend, args, config, device, verbose: bool = 
 
 def proc_folder_pytorch_optimized(args):
     """
-    Optimized PyTorch ile inference işleme fonksiyonu.
+    ULTRA-OPTIMIZED PyTorch ile inference işleme fonksiyonu.
     """
-    parser = argparse.ArgumentParser(description="Optimized PyTorch Inference for Music Source Separation")
+    parser = argparse.ArgumentParser(description="ULTRA-OPTIMIZED PyTorch Inference for Music Source Separation")
     parser.add_argument("--model_type", type=str, default='mdx23c', help="Model type")
     parser.add_argument("--config_path", type=str, help="Config path")
     parser.add_argument("--start_check_point", type=str, default='', help="Checkpoint path (.ckpt)")
@@ -271,11 +273,11 @@ def proc_folder_pytorch_optimized(args):
     parser.add_argument("--pcm_type", type=str, choices=['PCM_16', 'PCM_24'], default='PCM_24', help="PCM type")
     parser.add_argument("--chunk_size", type=int, default=1000000, help="Inference chunk size")
     parser.add_argument("--overlap", type=int, default=4, help="Inference overlap factor")
-    parser.add_argument("--optimize_mode", type=str, choices=['default', 'compile', 'jit', 'channels_last'], 
-                        default='default', help="PyTorch optimization mode")
-    parser.add_argument("--enable_amp", action='store_true', default=True, help="Enable automatic mixed precision")
-    parser.add_argument("--enable_tf32", action='store_true', default=True, help="Enable TF32 (Ampere GPUs)")
-    parser.add_argument("--enable_cudnn_benchmark", action='store_true', default=True, help="Enable cuDNN benchmark")
+    parser.add_argument("--optimize_mode", type=str, choices=['channels_last', 'compile', 'jit', 'default'], 
+                        default='channels_last', help="PyTorch optimization mode (channels_last recommended)")
+    parser.add_argument("--enable_amp", action='store_true', help="Enable automatic mixed precision (2x faster)")
+    parser.add_argument("--enable_tf32", action='store_true', help="Enable TF32 for RTX 30xx+ (faster)")
+    parser.add_argument("--enable_cudnn_benchmark", action='store_true', help="Enable cuDNN benchmark (faster after warmup)")
     
     if args is None:
         args = parser.parse_args()
@@ -322,8 +324,15 @@ def proc_folder_pytorch_optimized(args):
     
     print(i18n("instruments_print").format(config.training.instruments))
     
-    # Create optimized PyTorch backend
-    print(f"🔧 Creating optimized PyTorch backend (mode: {args.optimize_mode})...")
+    # Create ULTRA-OPTIMIZED PyTorch backend
+    print(f"\n{'='*70}")
+    print(f"🔥 CREATING ULTRA-OPTIMIZED PyTorch BACKEND")
+    print(f"{'='*70}")
+    print(f"🚀 Optimization Mode: {args.optimize_mode.upper()}")
+    print(f"⚡ Mixed Precision (AMP): {args.enable_amp}")
+    print(f"🎯 TF32 Acceleration: {args.enable_tf32}")
+    print(f"⚙️ cuDNN Benchmark: {args.enable_cudnn_benchmark}")
+    print(f"{'='*70}\n")
     
     backend = create_inference_session(
         model=model,

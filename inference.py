@@ -175,8 +175,10 @@ def proc_folder(args, use_tensorrt=False):
     parser.add_argument("--lora_checkpoint", type=str, default='', help=i18n("lora_checkpoint_help"))
     parser.add_argument("--chunk_size", type=int, default=1000000, help="Inference chunk size")
     parser.add_argument("--overlap", type=int, default=4, help="Inference overlap factor")
-    parser.add_argument("--use_pytorch_optimized", action='store_true', help="Use optimized PyTorch backend")
-    parser.add_argument("--optimize_mode", type=str, choices=['default', 'compile', 'jit', 'channels_last'], default='default', help="PyTorch optimization mode")
+    parser.add_argument("--optimize_mode", type=str, choices=['default', 'compile', 'jit', 'channels_last'], default='channels_last', help="PyTorch optimization mode (always enabled)")
+    parser.add_argument("--enable_amp", action='store_true', default=True, help="Enable automatic mixed precision")
+    parser.add_argument("--enable_tf32", action='store_true', default=True, help="Enable TF32 (Ampere GPUs)")
+    parser.add_argument("--enable_cudnn_benchmark", action='store_true', default=True, help="Enable cuDNN benchmark")
 
     if args is None:
         args = parser.parse_args()
@@ -211,12 +213,11 @@ def proc_folder(args, use_tensorrt=False):
 
     print(i18n("model_load_time").format(time.time() - model_load_start_time))
 
-    # Check which backend to use
-    use_pytorch_opt = args.use_pytorch_optimized
-    
-    if use_pytorch_opt and PYTORCH_OPTIMIZED_AVAILABLE:
-        print(f"\n🔥 Using optimized PyTorch backend (mode: {args.optimize_mode})")
-        print("   To use standard inference, remove --use_pytorch_optimized flag")
+    # Always use optimized PyTorch backend if available
+    if PYTORCH_OPTIMIZED_AVAILABLE:
+        print(f"\n🔥 Using ULTRA-OPTIMIZED PyTorch backend")
+        print(f"   🚀 Mode: {args.optimize_mode}")
+        print(f"   ⚡ AMP: {args.enable_amp} | 🎯 TF32: {args.enable_tf32} | ⚙️ cuDNN: {args.enable_cudnn_benchmark}")
         from inference_pytorch import proc_folder_pytorch_optimized
         # Recreate args for optimized PyTorch inference
         sys.argv = sys.argv[:1]  # Keep only script name
@@ -231,6 +232,7 @@ def proc_folder(args, use_tensorrt=False):
                     sys.argv.extend([f"--{key}", str(value)])
         proc_folder_pytorch_optimized(None)
     else:
+        print("⚠️ PyTorch optimized backend not available, using standard inference")
         run_folder(model, args, config, device, verbose=False)
 
 if __name__ == "__main__":

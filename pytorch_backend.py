@@ -14,20 +14,20 @@ import time
 
 class PyTorchBackend:
     """
-    Optimized PyTorch backend for model inference.
-    Provides various optimization techniques for faster inference.
+    ULTRA-OPTIMIZED PyTorch backend for model inference.
+    Provides various optimization techniques for maximum speed.
     """
     
-    def __init__(self, device='cuda:0', optimize_mode='default'):
+    def __init__(self, device='cuda:0', optimize_mode='channels_last'):
         """
-        Initialize PyTorch backend.
+        Initialize ULTRA-OPTIMIZED PyTorch backend.
         
         Parameters:
         ----------
         device : str
             Device to use for inference (cuda:0, cpu, mps, etc.)
         optimize_mode : str
-            Optimization mode: 'default', 'compile', 'jit', or 'channels_last'
+            Optimization mode: 'channels_last' (recommended), 'compile', 'jit', or 'default'
         """
         self.device = device
         self.optimize_mode = optimize_mode
@@ -41,13 +41,44 @@ class PyTorchBackend:
         elif device == 'mps' and not torch.backends.mps.is_available():
             warnings.warn("MPS not available, falling back to CPU")
             self.device = 'cpu'
+        
+        # Apply ultra optimization settings
+        self._apply_ultra_optimizations()
+    
+    def _apply_ultra_optimizations(self):
+        """Apply ultra-speed optimizations globally."""
+        if self.device.startswith('cuda'):
+            # Enable all CUDA optimizations
+            torch.backends.cudnn.benchmark = True
+            torch.backends.cuda.matmul.allow_tf32 = True
+            torch.backends.cudnn.allow_tf32 = True
+            
+            # Set optimal CUDA settings
+            torch.backends.cudnn.deterministic = False
+            torch.backends.cudnn.enabled = True
+            
+            # Enable cuBLAS optimizations
+            os.environ['CUBLAS_WORKSPACE_CONFIG'] = ':4096:8'
+            
+            print("🔥 ULTRA-OPTIMIZATION: CUDA optimizations enabled")
+            print("   ✅ cuDNN benchmark: ON")
+            print("   ✅ TF32: ON")
+            print("   ✅ cuBLAS optimizations: ON")
+        
+        # Optimize CPU inference
+        if self.device == 'cpu':
+            import multiprocessing
+            num_threads = multiprocessing.cpu_count()
+            torch.set_num_threads(num_threads)
+            torch.set_num_interop_threads(num_threads)
+            print(f"🔥 ULTRA-OPTIMIZATION: CPU threads set to {num_threads}")
     
     def optimize_model(
         self,
         model: nn.Module,
         example_input: Optional[torch.Tensor] = None,
         use_amp: bool = True,
-        use_channels_last: bool = False
+        use_channels_last: bool = True
     ) -> nn.Module:
         """
         Optimize PyTorch model for inference.
@@ -68,37 +99,51 @@ class PyTorchBackend:
         nn.Module
             Optimized model
         """
-        print(f"Optimizing model with mode: {self.optimize_mode}")
+        print(f"🚀 ULTRA-OPTIMIZING model with mode: {self.optimize_mode}")
         
         self.model = model.eval().to(self.device)
         self.use_amp = use_amp
         
-        # Apply memory format optimization
+        # Disable gradients for all parameters (inference only)
+        for param in self.model.parameters():
+            param.requires_grad = False
+        
+        # Apply memory format optimization (default: channels_last for CUDA)
         if use_channels_last and self.device.startswith('cuda'):
-            print("  → Applying channels-last memory format")
+            print("  ✅ Applying channels-last memory format (FASTER)")
             self.model = self.model.to(memory_format=torch.channels_last)
+        
+        # Set model to inference mode
+        torch.set_grad_enabled(False)
         
         # Apply optimization based on mode
         if self.optimize_mode == 'compile':
-            self.compiled_model = self._compile_model(model)
+            self.compiled_model = self._compile_model(self.model)
         elif self.optimize_mode == 'jit':
             if example_input is None:
                 raise ValueError("example_input required for JIT optimization")
-            self.compiled_model = self._jit_trace_model(model, example_input)
+            self.compiled_model = self._jit_trace_model(self.model, example_input)
         elif self.optimize_mode == 'channels_last':
-            print("  → Using channels-last optimization")
-            self.model = self.model.to(memory_format=torch.channels_last)
+            print("  ✅ Using channels-last optimization (RECOMMENDED)")
             self.compiled_model = self.model
         else:
-            print("  → Using default optimization")
+            print("  ✅ Using default optimization")
             self.compiled_model = self.model
         
-        print("✓ Model optimization complete")
+        # Apply fusion optimizations if possible
+        try:
+            if hasattr(torch.nn.utils, 'fusion'):
+                self.compiled_model = torch.nn.utils.fusion.fuse_conv_bn_eval(self.compiled_model)
+                print("  ✅ Conv-BN fusion applied")
+        except:
+            pass
+        
+        print("✅✅✅ ULTRA-OPTIMIZATION complete! Model ready for MAXIMUM SPEED")
         return self.compiled_model
     
     def _compile_model(self, model: nn.Module) -> nn.Module:
         """
-        Compile model using torch.compile (PyTorch 2.0+).
+        Compile model using torch.compile (PyTorch 2.0+) with ULTRA optimization.
         
         Parameters:
         ----------
@@ -112,9 +157,17 @@ class PyTorchBackend:
         """
         try:
             if hasattr(torch, 'compile'):
-                print("  → Compiling model with torch.compile")
-                compiled = torch.compile(model, mode='reduce-overhead')
-                return compiled
+                print("  🔥 Compiling model with torch.compile (ULTRA mode)")
+                # Try max-autotune for best performance
+                try:
+                    compiled = torch.compile(model, mode='max-autotune', fullgraph=True)
+                    print("  ✅ Using max-autotune mode (FASTEST)")
+                    return compiled
+                except:
+                    # Fallback to reduce-overhead
+                    compiled = torch.compile(model, mode='reduce-overhead')
+                    print("  ✅ Using reduce-overhead mode")
+                    return compiled
             else:
                 print("  ⚠ torch.compile not available (requires PyTorch 2.0+)")
                 return model
@@ -218,7 +271,11 @@ class PyTorchBackend:
         
         # Apply memory format if needed
         if self.optimize_mode == 'channels_last':
-            x = x.to(memory_format=torch.channels_last)
+            if x.dim() == 4:
+                x = x.to(memory_format=torch.channels_last)
+            else:
+                # Handle cases where tensor is not rank 4, e.g., print a warning or reshape
+                print(f"Warning: Tensor has rank {x.dim()}, skipping channels_last format.")
         
         # Run inference with AMP if enabled
         if self.use_amp and self.device.startswith('cuda'):
@@ -237,10 +294,11 @@ class PyTorchOptimizer:
     
     @staticmethod
     def enable_cudnn_benchmark():
-        """Enable cuDNN benchmark mode for faster inference."""
+        """Enable cuDNN benchmark mode for MAXIMUM speed."""
         if torch.cuda.is_available():
             torch.backends.cudnn.benchmark = True
-            print("✓ cuDNN benchmark enabled")
+            torch.backends.cudnn.deterministic = False
+            print("✅ cuDNN benchmark enabled (ULTRA mode)")
     
     @staticmethod
     def enable_cudnn_deterministic():
@@ -252,11 +310,13 @@ class PyTorchOptimizer:
     
     @staticmethod
     def enable_tf32():
-        """Enable TF32 for Ampere GPUs (RTX 30xx+)."""
+        """Enable TF32 for Ampere GPUs (RTX 30xx+) with ULTRA settings."""
         if torch.cuda.is_available():
             torch.backends.cuda.matmul.allow_tf32 = True
             torch.backends.cudnn.allow_tf32 = True
-            print("✓ TF32 enabled")
+            # Also enable for float32 matmul precision
+            torch.set_float32_matmul_precision('high')  # or 'highest' for max speed
+            print("✅ TF32 enabled (ULTRA mode)")
     
     @staticmethod
     def set_num_threads(num_threads: int):
@@ -267,7 +327,7 @@ class PyTorchOptimizer:
     @staticmethod
     def optimize_for_inference(model: nn.Module) -> nn.Module:
         """
-        Apply general optimization for inference.
+        Apply ULTRA optimization for inference.
         
         Parameters:
         ----------
@@ -277,18 +337,28 @@ class PyTorchOptimizer:
         Returns:
         -------
         nn.Module
-            Optimized model
+            ULTRA-optimized model
         """
         model.eval()
+        torch.set_grad_enabled(False)
         
-        # Disable gradient computation
+        # Disable gradient computation for all parameters
         for param in model.parameters():
             param.requires_grad = False
         
-        # Fuse batch norm if possible
+        # Fuse operations if possible
         try:
+            # Try to fuse batch norm
             model = torch.quantization.fuse_modules(model, inplace=True)
-            print("✓ Batch norm fused")
+            print("✅ Batch norm fused (FASTER)")
+        except:
+            pass
+        
+        try:
+            # Try to fuse conv-bn if available
+            if hasattr(torch.nn.utils, 'fusion'):
+                model = torch.nn.utils.fusion.fuse_conv_bn_eval(model)
+                print("✅ Conv-BN fused (FASTER)")
         except:
             pass
         

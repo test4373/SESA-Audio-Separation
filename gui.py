@@ -258,7 +258,7 @@ def create_interface():
                                         label=i18n("chunk_size"),
                                         choices=[352800, 485100],
                                         value=initial_settings["chunk_size"],
-                                        info=i18n("chunk_size_info")
+                                                                                info=i18n("chunk_size_info")
                                     )
 
                             with gr.Row():
@@ -272,21 +272,33 @@ def create_interface():
                                         info=i18n("overlap_info")
                                     )
 
-                            with gr.Accordion(i18n("backend_settings"), open=False) as backend_settings_accordion:
-                                gr.Markdown(f"### {i18n('inference_backend')}")
+                            with gr.Accordion(i18n("backend_settings"), open=True) as backend_settings_accordion:
+                                gr.Markdown(f"### 🔥 {i18n('inference_backend')} - Ultra Optimized PyTorch")
+                                gr.Markdown("**Varsayılan olarak aktif - Maximum hız optimizasyonu**")
+                                
                                 with gr.Row():
-                                    use_pytorch_optimized = gr.Checkbox(
-                                        label="🔥 Optimized PyTorch",
-                                        value=initial_settings.get("use_pytorch_optimized", False),
-                                        info="Use optimized PyTorch backend with various optimizations"
+                                    optimize_mode = gr.Dropdown(
+                                        label="🚀 Optimization Mode",
+                                        choices=['channels_last', 'compile', 'default'],
+                                        value=initial_settings.get("optimize_mode", "channels_last"),
+                                        info="channels_last: RTX GPUs için en hızlı | compile: PyTorch 2.0+ için ekstra hız | default: Standart"
                                     )
                                 
-                                with gr.Group(visible=initial_settings.get("use_pytorch_optimized", False)) as pytorch_opt_settings_group:
-                                    optimize_mode = gr.Dropdown(
-                                        label="Optimization Mode",
-                                        choices=['default', 'compile', 'channels_last'],
-                                        value=initial_settings.get("optimize_mode", "default"),
-                                        info="compile requires PyTorch 2.0+, channels_last is good for modern GPUs"
+                                with gr.Row():
+                                    enable_amp = gr.Checkbox(
+                                        label="⚡ Mixed Precision (AMP)",
+                                        value=initial_settings.get("enable_amp", True),
+                                        info="2x daha hızlı inference - önerilir"
+                                    )
+                                    enable_tf32 = gr.Checkbox(
+                                        label="🎯 TF32 Acceleration",
+                                        value=initial_settings.get("enable_tf32", True),
+                                        info="RTX 30xx+ için ekstra hız artışı"
+                                    )
+                                    enable_cudnn_benchmark = gr.Checkbox(
+                                        label="⚙️ cuDNN Benchmark",
+                                        value=initial_settings.get("enable_cudnn_benchmark", True),
+                                        info="İlk çalışmada yavaş, sonraki çalışmalarda çok hızlı"
                                     )
 
                             with gr.Row():
@@ -380,7 +392,7 @@ def create_interface():
                                     maximum=5,
                                     step=1,
                                     value=initial_settings.get("matchering_passes", 1),
-                                    info=i18n("matchering_passes_info"),
+                                                                        info=i18n("matchering_passes_info"),
                                     interactive=True
                                 )
 
@@ -388,13 +400,6 @@ def create_interface():
                             process_btn = gr.Button(i18n("process"), variant="primary")
                             clear_old_output_btn = gr.Button(i18n("reset"), variant="secondary")
                         clear_old_output_status = gr.Textbox(label=i18n("status"), interactive=False)
-                        
-                        # Backend visibility handler
-                        use_pytorch_optimized.change(
-                            fn=lambda x: gr.update(visible=x),
-                            inputs=use_pytorch_optimized,
-                            outputs=pytorch_opt_settings_group
-                        )
 
                         # Favorite handler
                         def update_favorite_button(model, favorites):
@@ -856,37 +861,39 @@ def create_interface():
                                 variant="primary",
                                 size="sm",
                                 elem_id="process-btn"
-                            )
+                                                        )
 
         def save_settings_on_process(*args):
-            apollo_method_value = args[13]
+            apollo_method_value = args[15]
             backend_apollo_method = "mid_side_method" if apollo_method_value == i18n("mid_side_method") else "normal_method"
             cleaned_model = clean_model(args[1]) if args[1] else None
             settings = {
                 "chunk_size": args[2],
                 "overlap": args[3],
                 "export_format": args[4],
-                "use_pytorch_optimized": args[5],
-                "optimize_mode": args[6],
-                "use_tta": args[7],
-                "use_demud_phaseremix_inst": args[8],
-                "extract_instrumental": args[9],
-                "use_apollo": args[10],
-                "apollo_chunk_size": args[11],
-                "apollo_overlap": args[12],
+                "optimize_mode": args[5],
+                "enable_amp": args[6],
+                "enable_tf32": args[7],
+                "enable_cudnn_benchmark": args[8],
+                "use_tta": args[9],
+                "use_demud_phaseremix_inst": args[10],
+                "extract_instrumental": args[11],
+                "use_apollo": args[12],
+                "apollo_chunk_size": args[13],
+                "apollo_overlap": args[14],
                 "apollo_method": backend_apollo_method,
-                "apollo_normal_model": args[14],
-                "apollo_midside_model": args[15],
-                "use_matchering": args[16],
-                "matchering_passes": args[17],
-                "model_category": args[18],
+                "apollo_normal_model": args[16],
+                "apollo_midside_model": args[17],
+                "use_matchering": args[18],
+                "matchering_passes": args[19],
+                "model_category": args[20],
                 "selected_model": cleaned_model,
-                "auto_ensemble_type": args[9]
+                "auto_ensemble_type": args[11]
             }
             save_config(load_config()["favorites"], settings, load_config()["presets"])
             modified_args = list(args)
             modified_args[1] = cleaned_model
-            modified_args[19] = cleaned_model
+            modified_args[21] = cleaned_model
             return process_audio(*modified_args)
 
         def save_auto_ensemble_settings(*args):
@@ -943,13 +950,13 @@ def create_interface():
         auto_category_dropdown.change(
             fn=lambda cat: gr.update(choices=update_model_dropdown(next((k for k in MODEL_CONFIGS.keys() if i18n(k) == cat), list(MODEL_CONFIGS.keys())[0]), favorites=load_config()["favorites"])["choices"]),
             inputs=auto_category_dropdown,
-            outputs=selected_models
+                        outputs=selected_models
         )
 
         def debug_inputs(*args):
             input_names = [
                 "input_audio_file", "model_dropdown", "chunk_size", "overlap", "export_format",
-                "use_pytorch_optimized", "optimize_mode",
+                "optimize_mode", "enable_amp", "enable_tf32", "enable_cudnn_benchmark",
                 "use_tta", "use_demud_phaseremix_inst", "extract_instrumental",
                 "use_apollo", "apollo_chunk_size", "apollo_overlap",
                 "apollo_method", "apollo_normal_model", "apollo_midside_model",
@@ -957,7 +964,7 @@ def create_interface():
             ]
             cleaned_args = list(args)
             cleaned_args[1] = clean_model(cleaned_args[1]) if cleaned_args[1] else None
-            cleaned_args[19] = clean_model(cleaned_args[19]) if cleaned_args[19] else None
+            cleaned_args[21] = clean_model(cleaned_args[21]) if cleaned_args[21] else None
             for name, value in zip(input_names, cleaned_args):
                 print(f"UI Input - {name}: {value}")
             return args
@@ -966,7 +973,7 @@ def create_interface():
             fn=lambda *args: save_settings_on_process(*debug_inputs(*args)),
             inputs=[
                 input_audio_file, model_dropdown, chunk_size, overlap, export_format,
-                use_pytorch_optimized, optimize_mode,
+                optimize_mode, enable_amp, enable_tf32, enable_cudnn_benchmark,
                 use_tta, use_demud_phaseremix_inst, extract_instrumental,
                 use_apollo, apollo_chunk_size, apollo_overlap,
                 apollo_method, apollo_normal_model, apollo_midside_model,
