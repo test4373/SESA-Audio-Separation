@@ -207,7 +207,7 @@ def run_command_and_process_files(
         if demud_phaseremix_inst:
             cmd_parts.append("--demud_phaseremix_inst")
 
-                print(f"Running command: {' '.join(cmd_parts)}")
+        print(f"Running command: {' '.join(cmd_parts)}")
         
         try:
             process = subprocess.run(
