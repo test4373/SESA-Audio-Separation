@@ -585,10 +585,6 @@ def load_start_checkpoint(args: argparse.Namespace, model: torch.nn.Module, type
             state_dict = torch.load(args.start_check_point, map_location=device, weights_only=True)
         model.load_state_dict(state_dict)
 
-    if args.lora_checkpoint:
-        print(f"Loading LoRA weights from: {args.lora_checkpoint}")
-        load_lora_weights(model, args.lora_checkpoint)
-
 
 def bind_lora_to_model(config: Dict[str, Any], model: nn.Module) -> nn.Module:
     """
