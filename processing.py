@@ -17,13 +17,6 @@ from model import get_model_config
 from apollo_processing import process_with_apollo  # Import Apollo processing
 import torch
 
-# TensorRT backend import (optional)
-try:
-    from tensorrt_backend import is_tensorrt_available
-    TENSORRT_SUPPORTED = is_tensorrt_available()
-except ImportError:
-    TENSORRT_SUPPORTED = False
-
 # PyTorch optimized backend (always available)
 try:
     from pytorch_backend import PyTorchBackend
@@ -70,6 +63,61 @@ else:
 
 os.makedirs(AUTO_ENSEMBLE_OUTPUT, exist_ok=True)
 os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+def setup_isolated_python():
+    """Setup isolated Python for TensorRT with all requirements."""
+    isolated_python = os.path.join(BASE_DIR, "python/bin/python3")
+    isolated_pip = os.path.join(BASE_DIR, "python/bin/pip3")
+    
+    if not os.path.exists(isolated_python):
+        return False
+    
+    # Check if requirements are already installed
+    check_file = os.path.join(BASE_DIR, "python/.requirements_installed")
+    if os.path.exists(check_file):
+        return True
+    
+    print("\n🔧 Setting up isolated Python environment for TensorRT...")
+    print("   This will take a few minutes (only runs once)\n")
+    
+    try:
+        # Install requirements in isolated Python
+        requirements_path = os.path.join(BASE_DIR, "requirements.txt")
+        
+        if os.path.exists(requirements_path):
+            print("   Installing requirements...")
+            result = subprocess.run(
+                [isolated_pip, "install", "-q", "-r", requirements_path],
+                capture_output=True,
+                text=True,
+                timeout=1800  # 30 minutes
+            )
+            
+            if result.returncode != 0:
+                print(f"   ⚠️  Warning: Some packages failed to install: {result.stderr[:200]}")
+            else:
+                print("   ✅ Requirements installed successfully")
+        
+        # Install TensorRT-specific packages
+        print("   Installing TensorRT packages...")
+        subprocess.run(
+            [isolated_pip, "install", "-q", "torch2trt"],
+            capture_output=True,
+            text=True,
+            timeout=600
+        )
+        
+        # Mark as installed
+        with open(check_file, 'w') as f:
+            f.write('installed')
+        
+        print("   ✅ Isolated Python setup complete!\n")
+        return True
+        
+    except Exception as e:
+        print(f"   ⚠️  Setup failed: {e}")
+        return False
+
 
 def setup_directories():
     """Create necessary directories and check Google Drive access."""
@@ -139,7 +187,9 @@ def run_command_and_process_files(
     apollo_overlap=2,
     apollo_method="normal_method",
     apollo_midside_model=None,
-    output_format="wav"
+    output_format="wav",
+    use_pytorch_optimized=False,
+    optimize_mode='default'
 ):
     """
     Run inference.py with specified parameters and process output files.
@@ -175,21 +225,17 @@ def run_command_and_process_files(
             apollo_overlap = 2
 
         # Check which backend to use
-        if use_tensorrt and TENSORRT_SUPPORTED:
-            from inference_tensorrt import INFERENCE_PATH as TRT_INFERENCE_PATH
-            inference_script = TRT_INFERENCE_PATH if os.path.exists(TRT_INFERENCE_PATH) else INFERENCE_PATH
-            print(f"🚀 Using TensorRT backend with {tensorrt_precision} precision")
-        elif use_pytorch_optimized and PYTORCH_OPTIMIZED_AVAILABLE:
+        if use_pytorch_optimized and PYTORCH_OPTIMIZED_AVAILABLE:
             from inference_pytorch import INFERENCE_PATH as PYTORCH_INFERENCE_PATH
             inference_script = PYTORCH_INFERENCE_PATH if os.path.exists(PYTORCH_INFERENCE_PATH) else INFERENCE_PATH
             print(f"🔥 Using optimized PyTorch backend (mode: {optimize_mode})")
+            python_exe = "python"
         else:
             inference_script = INFERENCE_PATH
-            if use_tensorrt and not TENSORRT_SUPPORTED:
-                print("⚠️  TensorRT requested but not available, falling back to PyTorch")
+            python_exe = "python"
         
         cmd_parts = [
-            "python", inference_script,
+            python_exe, inference_script,
             "--model_type", model_type,
             "--config_path", config_path,
             "--start_check_point", start_check_point,
@@ -201,12 +247,7 @@ def run_command_and_process_files(
         ]
         
         # Add backend-specific arguments
-        if use_tensorrt and TENSORRT_SUPPORTED:
-            cmd_parts.extend([
-                "--tensorrt_precision", tensorrt_precision,
-                "--use_tensorrt_cache"
-            ])
-        elif use_pytorch_optimized and PYTORCH_OPTIMIZED_AVAILABLE:
+        if use_pytorch_optimized and PYTORCH_OPTIMIZED_AVAILABLE:
             cmd_parts.extend([
                 "--optimize_mode", optimize_mode,
                 "--enable_amp",
@@ -222,13 +263,55 @@ def run_command_and_process_files(
             cmd_parts.append("--demud_phaseremix_inst")
 
         print(f"Running command: {' '.join(cmd_parts)}")
-        process = subprocess.run(
-            cmd_parts,
-            cwd=BASE_DIR,
-            capture_output=True,
-            text=True,
-            check=True
-        )
+        
+        # Prepare environment for isolated Python
+        env = os.environ.copy()
+        if python_exe.endswith('python/bin/python3'):
+            # Fix matplotlib backend for isolated Python
+            env['MPLBACKEND'] = 'Agg'
+        
+        try:
+            process = subprocess.run(
+                cmd_parts,
+                cwd=BASE_DIR,
+                capture_output=True,
+                text=True,
+                check=True,
+                timeout=3600,  # 1 hour timeout
+                env=env
+            )
+        except subprocess.CalledProcessError as e:
+            # If TensorRT fails, fallback to PyTorch
+            if use_tensorrt and "CUDA initialization failure" in str(e.stderr):
+                print("⚠️  TensorRT CUDA error, falling back to standard PyTorch")
+                cmd_parts = [
+                    "python", INFERENCE_PATH,
+                    "--model_type", model_type,
+                    "--config_path", config_path,
+                    "--start_check_point", start_check_point,
+                    "--input_folder", INPUT_DIR,
+                    "--store_dir", OUTPUT_DIR,
+                    "--chunk_size", str(inference_chunk_size),
+                    "--overlap", str(inference_overlap),
+                    "--export_format", f"{output_format} FLOAT"
+                ]
+                if extract_instrumental:
+                    cmd_parts.append("--extract_instrumental")
+                if use_tta:
+                    cmd_parts.append("--use_tta")
+                if demud_phaseremix_inst:
+                    cmd_parts.append("--demud_phaseremix_inst")
+                
+                print(f"Retry with PyTorch: {' '.join(cmd_parts)}")
+                process = subprocess.run(
+                    cmd_parts,
+                    cwd=BASE_DIR,
+                    capture_output=True,
+                    text=True,
+                    check=True
+                )
+            else:
+                raise
 
         # Log subprocess output
         print(f"Subprocess stdout: {process.stdout}")
@@ -338,6 +421,8 @@ def process_audio(
     chunk_size,
     overlap,
     export_format,
+    use_pytorch_optimized,
+    optimize_mode,
     use_tta,
     demud_phaseremix_inst,
     extract_instrumental,
@@ -347,12 +432,8 @@ def process_audio(
     apollo_method,
     apollo_normal_model,
     apollo_midside_model,
-    use_matchering=False,
-    matchering_passes=1,
-    use_tensorrt=False,
-    tensorrt_precision='fp16',
-    use_pytorch_optimized=False,
-    optimize_mode='default',
+    use_matchering,
+    matchering_passes,
     progress=gr.Progress(track_tqdm=True),
     *args,
     **kwargs
@@ -447,7 +528,9 @@ def process_audio(
             apollo_overlap=apollo_overlap,
             apollo_method=apollo_method,
             apollo_midside_model=apollo_midside_model,
-            output_format=export_format.split()[0].lower()
+            output_format=export_format.split()[0].lower(),
+            use_pytorch_optimized=use_pytorch_optimized,
+            optimize_mode=optimize_mode
         )
 
         if outputs is None or all(output is None for output in outputs):

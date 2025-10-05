@@ -8,12 +8,19 @@ import torch.nn as nn
 import yaml
 import os
 import soundfile as sf
-import matplotlib.pyplot as plt
 from ml_collections import ConfigDict
 from omegaconf import OmegaConf
 from tqdm.auto import tqdm
 from typing import Dict, List, Tuple, Any, Union
 import loralib as lora
+
+# Fix matplotlib backend for isolated Python environments
+try:
+    import matplotlib
+    matplotlib.use('Agg')  # Non-interactive backend
+    import matplotlib.pyplot as plt
+except ImportError:
+    plt = None
 
 
 def load_config(model_type: str, config_path: str) -> Union[ConfigDict, OmegaConf]:
@@ -642,6 +649,10 @@ def bind_lora_to_model(config: Dict[str, Any], model: nn.Module) -> nn.Module:
 
 
 def draw_spectrogram(waveform, sample_rate, length, output_file):
+    if plt is None:
+        print("Warning: matplotlib not available, skipping spectrogram")
+        return
+    
     import librosa.display
 
     # Cut only required part of spectorgram

@@ -257,6 +257,7 @@ class AudioEnsembleEngine:
             self.log_message(f"Starting ensemble with method: {method}")
             self.log_message(f"Input files: {json.dumps(valid_files, indent=2)}")
             self.log_message(f"Target sample rate: {target_sr}Hz")
+            self.log_message(f"Duration: {duration:.2f} seconds")
             self.log_message(f"Output path: {output_path}")
             
             # Ensure output directory exists
@@ -283,32 +284,58 @@ class AudioEnsembleEngine:
             else:
                 weights = None
             
-            # Open all files
+            # Open all files and verify exact alignment
             readers = []
             try:
                 readers = [sf.SoundFile(f) for f in valid_files]
-                shortest_frames = min(int(duration * r.samplerate) for r in readers)
+                
+                # Get exact frame counts from each file
+                frame_counts = [r.frames for r in readers]
+                self.log_message(f"Frame counts: {frame_counts}")
+                
+                # Use the shortest to avoid reading past file end
+                shortest_frames = min(frame_counts)
+                self.log_message(f"Using shortest frame count: {shortest_frames}")
                 
                 # Prepare output
                 self.log_message(f"Opening output file for writing: {output_path}")
                 with sf.SoundFile(output_path, 'w', target_sr, 2, 'PCM_24') as outfile:
                     # Process in chunks with progress bar
                     progress = tqdm(total=shortest_frames, unit='samples', desc='Processing')
+                    processed_frames = 0
                     
                     for pos in range(0, shortest_frames, buffer_size):
                         chunk_size = min(buffer_size, shortest_frames - pos)
                         
-                        # Read aligned chunks from all files
+                        # Read perfectly aligned chunks from all files
                         chunks = []
-                        for r in readers:
+                        for i, r in enumerate(readers):
+                            # Ensure we're at the exact position
                             r.seek(pos)
+                            current_pos = r.tell()
+                            
+                            if current_pos != pos:
+                                self.log_message(f"Warning: File {i} seek mismatch. Expected {pos}, got {current_pos}")
+                                r.seek(pos)
+                            
+                            # Read exact chunk size
                             data = r.read(chunk_size)
-                            if data.size == 0:
-                                data = np.zeros((chunk_size, 2))
+                            
+                            # Verify chunk size
+                            if data.shape[0] != chunk_size:
+                                self.log_message(f"Warning: File {i} chunk size mismatch. Expected {chunk_size}, got {data.shape[0]}")
+                                # Pad or truncate to match
+                                if data.shape[0] < chunk_size:
+                                    data = np.pad(data, ((0, chunk_size - data.shape[0]), (0, 0)), mode='constant')
+                                else:
+                                    data = data[:chunk_size]
+                            
                             chunks.append(data.T)  # Transpose to (channels, samples)
                         
                         chunks = np.array(chunks)
-                        self.log_message(f"Chunk shape: {chunks.shape}, pos={pos}")
+                        
+                        if pos % (10 * buffer_size) == 0:  # Log every 10 chunks
+                            self.log_message(f"Processing chunk at pos={pos}, shape={chunks.shape}")
                         
                         # Process based on method type
                         if method.endswith('_fft'):
@@ -319,8 +346,19 @@ class AudioEnsembleEngine:
                         else:
                             result = self.process_waveform(chunks, method, weights)
                         
+                        # Verify result shape
+                        expected_shape = (2, chunk_size)
+                        if result.shape != expected_shape:
+                            self.log_message(f"Warning: Result shape {result.shape} != expected {expected_shape}")
+                            # Adjust result to match expected shape
+                            if result.shape[1] < chunk_size:
+                                result = np.pad(result, ((0, 0), (0, chunk_size - result.shape[1])), mode='constant')
+                            elif result.shape[1] > chunk_size:
+                                result = result[:, :chunk_size]
+                        
                         # Write output
                         outfile.write(result.T)  # Transpose back to (samples, channels)
+                        processed_frames += chunk_size
                         
                         # Clean up and update progress
                         del chunks, result

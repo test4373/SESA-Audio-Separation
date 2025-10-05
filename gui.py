@@ -275,23 +275,10 @@ def create_interface():
                             with gr.Accordion(i18n("backend_settings"), open=False) as backend_settings_accordion:
                                 gr.Markdown(f"### {i18n('inference_backend')}")
                                 with gr.Row():
-                                    use_tensorrt = gr.Checkbox(
-                                        label="🚀 TensorRT Backend",
-                                        value=initial_settings.get("use_tensorrt", False),
-                                        info="Use NVIDIA TensorRT for faster inference (requires TensorRT)"
-                                    )
                                     use_pytorch_optimized = gr.Checkbox(
                                         label="🔥 Optimized PyTorch",
                                         value=initial_settings.get("use_pytorch_optimized", False),
                                         info="Use optimized PyTorch backend with various optimizations"
-                                    )
-                                
-                                with gr.Group(visible=initial_settings.get("use_tensorrt", False)) as tensorrt_settings_group:
-                                    tensorrt_precision = gr.Dropdown(
-                                        label="TensorRT Precision",
-                                        choices=['fp32', 'fp16'],
-                                        value=initial_settings.get("tensorrt_precision", "fp16"),
-                                        info="FP16 is faster, FP32 is more accurate"
                                     )
                                 
                                 with gr.Group(visible=initial_settings.get("use_pytorch_optimized", False)) as pytorch_opt_settings_group:
@@ -402,17 +389,11 @@ def create_interface():
                             clear_old_output_btn = gr.Button(i18n("reset"), variant="secondary")
                         clear_old_output_status = gr.Textbox(label=i18n("status"), interactive=False)
                         
-                        # Backend visibility handlers
-                        use_tensorrt.change(
-                            fn=lambda x, y: [gr.update(visible=x), gr.update(value=False) if x else gr.update()],
-                            inputs=[use_tensorrt, use_pytorch_optimized],
-                            outputs=[tensorrt_settings_group, use_pytorch_optimized]
-                        )
-                        
+                        # Backend visibility handler
                         use_pytorch_optimized.change(
-                            fn=lambda x, y: [gr.update(visible=x), gr.update(value=False) if x else gr.update()],
-                            inputs=[use_pytorch_optimized, use_tensorrt],
-                            outputs=[pytorch_opt_settings_group, use_tensorrt]
+                            fn=lambda x: gr.update(visible=x),
+                            inputs=use_pytorch_optimized,
+                            outputs=pytorch_opt_settings_group
                         )
 
                         # Favorite handler
@@ -878,36 +859,34 @@ def create_interface():
                             )
 
         def save_settings_on_process(*args):
-            apollo_method_value = args[15]
+            apollo_method_value = args[13]
             backend_apollo_method = "mid_side_method" if apollo_method_value == i18n("mid_side_method") else "normal_method"
             cleaned_model = clean_model(args[1]) if args[1] else None
             settings = {
                 "chunk_size": args[2],
                 "overlap": args[3],
                 "export_format": args[4],
-                "use_tensorrt": args[5],
-                "tensorrt_precision": args[6],
-                "use_pytorch_optimized": args[7],
-                "optimize_mode": args[8],
-                "use_tta": args[9],
-                "use_demud_phaseremix_inst": args[10],
-                "extract_instrumental": args[11],
-                "use_apollo": args[12],
-                "apollo_chunk_size": args[13],
-                "apollo_overlap": args[14],
+                "use_pytorch_optimized": args[5],
+                "optimize_mode": args[6],
+                "use_tta": args[7],
+                "use_demud_phaseremix_inst": args[8],
+                "extract_instrumental": args[9],
+                "use_apollo": args[10],
+                "apollo_chunk_size": args[11],
+                "apollo_overlap": args[12],
                 "apollo_method": backend_apollo_method,
-                "apollo_normal_model": args[16],
-                "apollo_midside_model": args[17],
-                "use_matchering": args[18],
-                "matchering_passes": args[19],
-                "model_category": args[20],
+                "apollo_normal_model": args[14],
+                "apollo_midside_model": args[15],
+                "use_matchering": args[16],
+                "matchering_passes": args[17],
+                "model_category": args[18],
                 "selected_model": cleaned_model,
-                "auto_ensemble_type": args[11]
+                "auto_ensemble_type": args[9]
             }
             save_config(load_config()["favorites"], settings, load_config()["presets"])
             modified_args = list(args)
             modified_args[1] = cleaned_model
-            modified_args[21] = cleaned_model
+            modified_args[19] = cleaned_model
             return process_audio(*modified_args)
 
         def save_auto_ensemble_settings(*args):
@@ -970,6 +949,7 @@ def create_interface():
         def debug_inputs(*args):
             input_names = [
                 "input_audio_file", "model_dropdown", "chunk_size", "overlap", "export_format",
+                "use_pytorch_optimized", "optimize_mode",
                 "use_tta", "use_demud_phaseremix_inst", "extract_instrumental",
                 "use_apollo", "apollo_chunk_size", "apollo_overlap",
                 "apollo_method", "apollo_normal_model", "apollo_midside_model",
@@ -977,7 +957,7 @@ def create_interface():
             ]
             cleaned_args = list(args)
             cleaned_args[1] = clean_model(cleaned_args[1]) if cleaned_args[1] else None
-            cleaned_args[17] = clean_model(cleaned_args[17]) if cleaned_args[17] else None
+            cleaned_args[19] = clean_model(cleaned_args[19]) if cleaned_args[19] else None
             for name, value in zip(input_names, cleaned_args):
                 print(f"UI Input - {name}: {value}")
             return args
@@ -986,7 +966,7 @@ def create_interface():
             fn=lambda *args: save_settings_on_process(*debug_inputs(*args)),
             inputs=[
                 input_audio_file, model_dropdown, chunk_size, overlap, export_format,
-                use_tensorrt, tensorrt_precision, use_pytorch_optimized, optimize_mode,
+                use_pytorch_optimized, optimize_mode,
                 use_tta, use_demud_phaseremix_inst, extract_instrumental,
                 use_apollo, apollo_chunk_size, apollo_overlap,
                 apollo_method, apollo_normal_model, apollo_midside_model,
