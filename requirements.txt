@@ -17,7 +17,7 @@ demucs
 audiomentations
 torch_audiomentations
 httpx
-gradio
+gradio>=4.0
 google-api-python-client
 pytube
 tqdm
