@@ -14,7 +14,15 @@ from datetime import datetime
 import numpy as np
 import shutil
 from gui import create_interface
-from pyngrok import ngrok
+
+# pyngrok import (optional - only needed for ngrok sharing)
+try:
+    from pyngrok import ngrok
+    NGROK_AVAILABLE = True
+except ImportError:
+    NGROK_AVAILABLE = False
+    ngrok = None
+
 from assets.i18n.i18n import I18nAuto  # I18nAuto'yu içe aktar
 
 import warnings
@@ -56,6 +64,9 @@ def start_localtunnel(port, i18n):
 
 def start_ngrok(port, ngrok_token, i18n):
     """Starts the Gradio interface with ngrok sharing."""
+    if not NGROK_AVAILABLE:
+        print("pyngrok modülü yüklü değil. 'pip install pyngrok' ile yükleyin.")
+        sys.exit(1)
     print(i18n("starting_ngrok").format(port=port))
     try:
         ngrok.set_auth_token(ngrok_token)

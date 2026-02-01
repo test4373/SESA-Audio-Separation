@@ -20,8 +20,19 @@ from datetime import datetime
 import yt_dlp
 import validators
 from pytube import YouTube
-from googleapiclient.discovery import build
-from googleapiclient.http import MediaIoBaseDownload
+
+# Google API imports (optional - for Colab/Google Drive support)
+try:
+    from googleapiclient.discovery import build
+    from googleapiclient.http import MediaIoBaseDownload
+    from google.oauth2.credentials import Credentials
+    GOOGLE_API_AVAILABLE = True
+except ImportError:
+    GOOGLE_API_AVAILABLE = False
+    build = None
+    MediaIoBaseDownload = None
+    Credentials = None
+
 import io
 import math
 import hashlib
@@ -29,7 +40,6 @@ import gc
 import psutil
 import concurrent.futures
 from tqdm import tqdm
-from google.oauth2.credentials import Credentials
 import tempfile
 from urllib.parse import urlparse, quote
 import argparse

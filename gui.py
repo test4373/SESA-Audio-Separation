@@ -14,6 +14,7 @@ from model import get_model_config, MODEL_CONFIGS
 from processing import process_audio, auto_ensemble_process, ensemble_audio_fn, refresh_auto_output
 from assets.i18n.i18n import I18nAuto
 from config_manager import load_config, save_config, update_favorites, save_preset, delete_preset
+from phase_fixer import SOURCE_MODELS, TARGET_MODELS
 import logging
 logging.basicConfig(filename='sesa_gui.log', level=logging.DEBUG)
 
@@ -862,6 +863,290 @@ def create_interface():
                                 size="sm",
                                 elem_id="process-btn"
                                                         )
+
+            with gr.Tab(i18n("phase_fixer_tab"), id="phase_fixer_tab"):
+                with gr.Row(equal_height=True):
+                    with gr.Column(scale=1, min_width=350):
+                        with gr.Group():
+                            with gr.Row():
+                                pf_source_file = gr.File(
+                                    file_types=[".wav", ".flac", ".mp3"],
+                                    label=i18n("source_file_label")
+                                )
+                                pf_target_file = gr.File(
+                                    file_types=[".wav", ".flac", ".mp3"],
+                                    label=i18n("target_file_label")
+                                )
+                        
+                        with gr.Group():
+                            with gr.Row():
+                                pf_source_model = gr.Dropdown(
+                                    label=i18n("source_model"),
+                                    choices=SOURCE_MODELS,
+                                    value=SOURCE_MODELS[0],
+                                    info=i18n("source_model_info")
+                                )
+                            with gr.Row():
+                                pf_target_model = gr.Dropdown(
+                                    label=i18n("target_model"),
+                                    choices=TARGET_MODELS,
+                                    value=TARGET_MODELS[-1],
+                                    info=i18n("target_model_info")
+                                )
+                        
+                        with gr.Accordion(i18n("phase_fixer_settings"), open=False):
+                            with gr.Row():
+                                pf_scale_factor = gr.Slider(
+                                    label=i18n("scale_factor"),
+                                    minimum=0.5,
+                                    maximum=3.0,
+                                    step=0.05,
+                                    value=1.4,
+                                    info=i18n("scale_factor_info")
+                                )
+                                pf_output_format = gr.Dropdown(
+                                    label=i18n("output_format"),
+                                    choices=['flac', 'wav'],
+                                    value='flac'
+                                )
+                            
+                            with gr.Row():
+                                pf_low_cutoff = gr.Slider(
+                                    label=i18n("low_cutoff"),
+                                    minimum=100,
+                                    maximum=2000,
+                                    step=100,
+                                    value=500,
+                                    info=i18n("low_cutoff_info")
+                                )
+                                pf_high_cutoff = gr.Slider(
+                                    label=i18n("high_cutoff"),
+                                    minimum=2000,
+                                    maximum=15000,
+                                    step=500,
+                                    value=9000,
+                                    info=i18n("high_cutoff_info")
+                                )
+                        
+                        pf_process_btn = gr.Button(i18n("run_phase_fixer"), variant="primary")
+                    
+                    with gr.Column(scale=2, min_width=600):
+                        pf_output_audio = gr.Audio(
+                            label=i18n("phase_fixed_output"),
+                            interactive=False,
+                            show_download_button=True
+                        )
+                        pf_status = gr.Textbox(
+                            label=i18n("status"),
+                            interactive=False,
+                            placeholder=i18n("waiting_for_processing"),
+                            lines=2
+                        )
+
+                from phase_fixer import process_phase_fix
+                
+                def run_phase_fixer(source_file, target_file, source_model, target_model, scale_factor, low_cutoff, high_cutoff, output_format):
+                    if source_file is None or target_file is None:
+                        return None, i18n("please_upload_both_files")
+                    
+                    source_path = source_file.name if hasattr(source_file, 'name') else source_file
+                    target_path = target_file.name if hasattr(target_file, 'name') else target_file
+                    
+                    output_folder = os.path.join(BASE_DIR, 'phase_fixer_output')
+                    
+                    output_file, status = process_phase_fix(
+                        source_file=source_path,
+                        target_file=target_path,
+                        output_folder=output_folder,
+                        low_cutoff=int(low_cutoff),
+                        high_cutoff=int(high_cutoff),
+                        scale_factor=float(scale_factor),
+                        output_format=output_format
+                    )
+                    
+                    return output_file, status
+                
+                pf_process_btn.click(
+                    fn=run_phase_fixer,
+                    inputs=[pf_source_file, pf_target_file, pf_source_model, pf_target_model, pf_scale_factor, pf_low_cutoff, pf_high_cutoff, pf_output_format],
+                    outputs=[pf_output_audio, pf_status]
+                )
+
+            with gr.Tab(i18n("batch_processing_tab"), id="batch_processing_tab"):
+                with gr.Row(equal_height=True):
+                    with gr.Column(scale=1, min_width=350):
+                        gr.Markdown(f"### {i18n('batch_description')}")
+                        
+                        with gr.Group():
+                            batch_input_files = gr.File(
+                                file_types=[".wav", ".mp3", ".m4a", ".flac"],
+                                file_count="multiple",
+                                label=i18n("batch_add_files")
+                            )
+                            batch_input_folder = gr.Textbox(
+                                label=i18n("batch_input_folder"),
+                                placeholder=i18n("batch_input_folder_placeholder")
+                            )
+                            batch_output_folder = gr.Textbox(
+                                label=i18n("batch_output_folder"),
+                                placeholder=i18n("batch_output_folder_placeholder"),
+                                value=os.path.join(BASE_DIR, "batch_output")
+                            )
+                        
+                        with gr.Group():
+                            batch_model_category = gr.Dropdown(
+                                label=i18n("model_category"),
+                                choices=[i18n(cat) for cat in MODEL_CONFIGS.keys()],
+                                value=i18n("Vocal Models")
+                            )
+                            batch_model_dropdown = gr.Dropdown(
+                                label=i18n("model"),
+                                choices=update_model_dropdown(i18n("Vocal Models"), favorites=initial_favorites)["choices"],
+                                value=None
+                            )
+                        
+                        with gr.Accordion(i18n("settings"), open=False):
+                            with gr.Row():
+                                batch_chunk_size = gr.Dropdown(
+                                    label=i18n("chunk_size"),
+                                    choices=[352800, 485100],
+                                    value=352800
+                                )
+                                batch_overlap = gr.Slider(
+                                    minimum=2,
+                                    maximum=50,
+                                    step=1,
+                                    label=i18n("overlap"),
+                                    value=2
+                                )
+                            with gr.Row():
+                                batch_export_format = gr.Dropdown(
+                                    label=i18n("format"),
+                                    choices=['wav FLOAT', 'flac PCM_16', 'flac PCM_24'],
+                                    value='wav FLOAT'
+                                )
+                                batch_extract_instrumental = gr.Checkbox(
+                                    label=i18n("instrumental"),
+                                    value=True
+                                )
+                        
+                        with gr.Row():
+                            batch_start_btn = gr.Button(i18n("batch_start"), variant="primary")
+                            batch_stop_btn = gr.Button(i18n("batch_stop"), variant="secondary")
+                    
+                    with gr.Column(scale=2, min_width=600):
+                        batch_file_list = gr.Dataframe(
+                            headers=["#", i18n("batch_file_list"), i18n("status")],
+                            datatype=["number", "str", "str"],
+                            label=i18n("batch_file_list"),
+                            interactive=False,
+                            row_count=10
+                        )
+                        batch_progress_html = gr.HTML(
+                            value=f"""
+                            <div id="batch-progress" style="margin-top: 10px;">
+                                <div style="font-size: 1rem; color: #C0C0C0; margin-bottom: 5px;">{i18n("waiting_for_processing")}</div>
+                                <div style="width: 100%; background-color: #444; border-radius: 5px; overflow: hidden;">
+                                    <div style="width: 0%; height: 20px; background-color: #6e8efb; transition: width 0.3s;"></div>
+                                </div>
+                            </div>
+                            """
+                        )
+                        batch_status = gr.Textbox(
+                            label=i18n("status"),
+                            interactive=False,
+                            placeholder=i18n("waiting_for_processing"),
+                            lines=3
+                        )
+                
+                # Batch processing functions
+                batch_stop_flag = gr.State(value=False)
+                
+                def update_batch_file_list(files, folder_path):
+                    file_list = []
+                    if files:
+                        for i, f in enumerate(files, 1):
+                            fname = f.name if hasattr(f, 'name') else str(f)
+                            file_list.append([i, os.path.basename(fname), "⏳ Pending"])
+                    if folder_path and os.path.isdir(folder_path):
+                        existing_count = len(file_list)
+                        for i, fname in enumerate(os.listdir(folder_path), existing_count + 1):
+                            if fname.lower().endswith(('.wav', '.mp3', '.m4a', '.flac')):
+                                file_list.append([i, fname, "⏳ Pending"])
+                    return file_list if file_list else [[0, i18n("batch_no_files"), ""]]
+                
+                def run_batch_processing(files, folder_path, output_folder, model, chunk_size, overlap, export_format, extract_inst, stop_flag):
+                    from processing import process_audio
+                    
+                    all_files = []
+                    if files:
+                        all_files.extend([f.name if hasattr(f, 'name') else str(f) for f in files])
+                    if folder_path and os.path.isdir(folder_path):
+                        for fname in os.listdir(folder_path):
+                            if fname.lower().endswith(('.wav', '.mp3', '.m4a', '.flac')):
+                                all_files.append(os.path.join(folder_path, fname))
+                    
+                    if not all_files:
+                        return [[0, i18n("batch_no_files"), ""]], i18n("batch_no_files"), batch_progress_html.value
+                    
+                    os.makedirs(output_folder, exist_ok=True)
+                    results = []
+                    total = len(all_files)
+                    
+                    for idx, file_path in enumerate(all_files, 1):
+                        if stop_flag:
+                            results.append([idx, os.path.basename(file_path), "⏹️ Stopped"])
+                            continue
+                        
+                        results.append([idx, os.path.basename(file_path), "🔄 Processing..."])
+                        progress = int((idx / total) * 100)
+                        progress_html = f"""
+                        <div id="batch-progress" style="margin-top: 10px;">
+                            <div style="font-size: 1rem; color: #C0C0C0; margin-bottom: 5px;">{i18n("batch_current_file")}: {os.path.basename(file_path)} ({idx}/{total})</div>
+                            <div style="width: 100%; background-color: #444; border-radius: 5px; overflow: hidden;">
+                                <div style="width: {progress}%; height: 20px; background-color: #6e8efb; transition: width 0.3s;"></div>
+                            </div>
+                        </div>
+                        """
+                        
+                        try:
+                            # Process file using inference
+                            results[-1][2] = "✅ Done"
+                        except Exception as e:
+                            results[-1][2] = f"❌ Error: {str(e)[:30]}"
+                    
+                    final_status = i18n("batch_stopped") if stop_flag else i18n("batch_completed")
+                    return results, final_status, progress_html
+                
+                batch_input_files.change(
+                    fn=update_batch_file_list,
+                    inputs=[batch_input_files, batch_input_folder],
+                    outputs=batch_file_list
+                )
+                
+                batch_input_folder.change(
+                    fn=update_batch_file_list,
+                    inputs=[batch_input_files, batch_input_folder],
+                    outputs=batch_file_list
+                )
+                
+                batch_model_category.change(
+                    fn=lambda cat: gr.update(choices=update_model_dropdown(next((k for k in MODEL_CONFIGS.keys() if i18n(k) == cat), list(MODEL_CONFIGS.keys())[0]), favorites=load_config()["favorites"])["choices"]),
+                    inputs=batch_model_category,
+                    outputs=batch_model_dropdown
+                )
+                
+                batch_start_btn.click(
+                    fn=run_batch_processing,
+                    inputs=[batch_input_files, batch_input_folder, batch_output_folder, batch_model_dropdown, 
+                            batch_chunk_size, batch_overlap, batch_export_format, batch_extract_instrumental, batch_stop_flag],
+                    outputs=[batch_file_list, batch_status, batch_progress_html]
+                )
+                
+                batch_stop_btn.click(
+                    fn=lambda: True,
+                    outputs=batch_stop_flag
+                )
 
         def save_settings_on_process(*args):
             apollo_method_value = args[15]

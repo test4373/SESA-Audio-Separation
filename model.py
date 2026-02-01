@@ -28,11 +28,12 @@ def conf_edit(config_path, chunk_size, overlap):
     with open(full_config_path, 'w') as f:
         yaml.dump(data, f, default_flow_style=False, sort_keys=False, Dumper=yaml.Dumper)
 
-def download_file(url):
+def download_file(url, path=None):
     """Downloads a file from a URL."""
     import requests
     encoded_url = quote(url, safe=':/')
-    path = CHECKPOINT_DIR
+    if path is None:
+        path = CHECKPOINT_DIR
     os.makedirs(path, exist_ok=True)
     filename = os.path.basename(encoded_url)
     file_path = os.path.join(path, filename)
@@ -40,10 +41,11 @@ def download_file(url):
         print(f"File '{filename}' already exists at '{path}'.")
         return
     try:
-        response = requests.get(url)
+        response = requests.get(url, stream=True)
         if response.status_code == 200:
             with open(file_path, 'wb') as f:
-                f.write(response.content)
+                for chunk in response.iter_content(chunk_size=8192):
+                    f.write(chunk)
             print(f"File '{filename}' downloaded successfully")
         else:
             print(f"Error downloading '{filename}': Status code {response.status_code}")
@@ -270,6 +272,136 @@ MODEL_CONFIGS = {
             'download_urls': [
                 'https://huggingface.co/Aname-Tommy/MelBandRoformers/blob/main/config.yaml',
                 'https://huggingface.co/Aname-Tommy/MelBandRoformers/blob/main/FullnessVocalModel.ckpt'
+            ],
+            'needs_conf_edit': True
+        },
+        'voc_fv4 (by Gabox)': {
+            'model_type': 'mel_band_roformer',
+            'config_path': os.path.join(CHECKPOINT_DIR, 'voc_gabox.yaml'),
+            'start_check_point': os.path.join(CHECKPOINT_DIR, 'voc_fv4.ckpt'),
+            'download_urls': [
+                'https://huggingface.co/GaboxR67/MelBandRoformers/resolve/main/melbandroformers/vocals/voc_gabox.yaml',
+                'https://huggingface.co/GaboxR67/MelBandRoformers/resolve/main/melbandroformers/vocals/voc_fv4.ckpt'
+            ],
+            'needs_conf_edit': True
+        },
+        'voc_fv5 (by Gabox)': {
+            'model_type': 'mel_band_roformer',
+            'config_path': os.path.join(CHECKPOINT_DIR, 'voc_gabox.yaml'),
+            'start_check_point': os.path.join(CHECKPOINT_DIR, 'voc_fv5.ckpt'),
+            'download_urls': [
+                'https://huggingface.co/GaboxR67/MelBandRoformers/resolve/main/melbandroformers/vocals/voc_gabox.yaml',
+                'https://huggingface.co/GaboxR67/MelBandRoformers/resolve/main/melbandroformers/vocals/voc_fv5.ckpt'
+            ],
+            'needs_conf_edit': True
+        },
+        'voc_fv6 (by Gabox)': {
+            'model_type': 'mel_band_roformer',
+            'config_path': os.path.join(CHECKPOINT_DIR, 'voc_gabox.yaml'),
+            'start_check_point': os.path.join(CHECKPOINT_DIR, 'voc_fv6.ckpt'),
+            'download_urls': [
+                'https://huggingface.co/GaboxR67/MelBandRoformers/resolve/main/melbandroformers/vocals/voc_gabox.yaml',
+                'https://huggingface.co/GaboxR67/MelBandRoformers/resolve/main/melbandroformers/vocals/voc_fv6.ckpt'
+            ],
+            'needs_conf_edit': True
+        },
+        'voc_fv7 (by Gabox)': {
+            'model_type': 'mel_band_roformer',
+            'config_path': os.path.join(CHECKPOINT_DIR, 'v7.yaml'),
+            'start_check_point': os.path.join(CHECKPOINT_DIR, 'voc_fv7.ckpt'),
+            'download_urls': [
+                'https://huggingface.co/GaboxR67/MelBandRoformers/resolve/main/melbandroformers/vocals/v7.yaml',
+                'https://huggingface.co/GaboxR67/MelBandRoformers/resolve/main/melbandroformers/vocals/voc_fv7.ckpt'
+            ],
+            'needs_conf_edit': True
+        },
+        'vocfv7beta1 (by Gabox)': {
+            'model_type': 'mel_band_roformer',
+            'config_path': os.path.join(CHECKPOINT_DIR, 'voc_gabox.yaml'),
+            'start_check_point': os.path.join(CHECKPOINT_DIR, 'vocfv7beta1.ckpt'),
+            'download_urls': [
+                'https://huggingface.co/GaboxR67/MelBandRoformers/resolve/main/melbandroformers/vocals/voc_gabox.yaml',
+                'https://huggingface.co/GaboxR67/MelBandRoformers/resolve/main/melbandroformers/experimental/vocfv7beta1.ckpt'
+            ],
+            'needs_conf_edit': True
+        },
+        'vocfv7beta2 (by Gabox)': {
+            'model_type': 'mel_band_roformer',
+            'config_path': os.path.join(CHECKPOINT_DIR, 'voc_gabox.yaml'),
+            'start_check_point': os.path.join(CHECKPOINT_DIR, 'vocfv7beta2.ckpt'),
+            'download_urls': [
+                'https://huggingface.co/GaboxR67/MelBandRoformers/resolve/main/melbandroformers/vocals/voc_gabox.yaml',
+                'https://huggingface.co/GaboxR67/MelBandRoformers/resolve/main/melbandroformers/experimental/vocfv7beta2.ckpt'
+            ],
+            'needs_conf_edit': True
+        },
+        'vocfv7beta3 (by Gabox)': {
+            'model_type': 'mel_band_roformer',
+            'config_path': os.path.join(CHECKPOINT_DIR, 'voc_gabox.yaml'),
+            'start_check_point': os.path.join(CHECKPOINT_DIR, 'vocfv7beta3.ckpt'),
+            'download_urls': [
+                'https://huggingface.co/GaboxR67/MelBandRoformers/resolve/main/melbandroformers/vocals/voc_gabox.yaml',
+                'https://huggingface.co/GaboxR67/MelBandRoformers/resolve/main/melbandroformers/experimental/vocfv7beta3.ckpt'
+            ],
+            'needs_conf_edit': True
+        },
+        'MelBandRoformerSYHFTV3Epsilon (by SYH99999)': {
+            'model_type': 'mel_band_roformer',
+            'config_path': os.path.join(CHECKPOINT_DIR, 'config_vocals_mel_band_roformer_ft.yaml'),
+            'start_check_point': os.path.join(CHECKPOINT_DIR, 'MelBandRoformerSYHFTV3Epsilon.ckpt'),
+            'download_urls': [
+                'https://huggingface.co/SYH99999/MelBandRoformerSYHFT/resolve/main/config_vocals_mel_band_roformer_ft.yaml',
+                'https://huggingface.co/SYH99999/MelBandRoformerSYHFTV3Epsilon/resolve/main/MelBandRoformerSYHFTV3Epsilon.ckpt'
+            ],
+            'needs_conf_edit': True
+        },
+        'MelBandRoformerBigSYHFTV1 (by SYH99999)': {
+            'model_type': 'mel_band_roformer',
+            'config_path': os.path.join(CHECKPOINT_DIR, 'config_big_syhft.yaml'),
+            'start_check_point': os.path.join(CHECKPOINT_DIR, 'MelBandRoformerBigSYHFTV1.ckpt'),
+            'download_urls': [
+                'https://huggingface.co/SYH99999/MelBandRoformerBigSYHFTV1Fast/resolve/main/config.yaml',
+                'https://huggingface.co/SYH99999/MelBandRoformerBigSYHFTV1Fast/resolve/main/MelBandRoformerBigSYHFTV1.ckpt'
+            ],
+            'needs_conf_edit': True
+        },
+        'model_chorus_bs_roformer_ep_146 (by Sucial)': {
+            'model_type': 'bs_roformer',
+            'config_path': os.path.join(CHECKPOINT_DIR, 'config_chorus_male_female_bs_roformer.yaml'),
+            'start_check_point': os.path.join(CHECKPOINT_DIR, 'model_chorus_bs_roformer_ep_146_sdr_23.8613.ckpt'),
+            'download_urls': [
+                'https://huggingface.co/Sucial/Chorus_Male_Female_BS_Roformer/resolve/main/config_chorus_male_female_bs_roformer.yaml',
+                'https://huggingface.co/Sucial/Chorus_Male_Female_BS_Roformer/resolve/main/model_chorus_bs_roformer_ep_146_sdr_23.8613.ckpt'
+            ],
+            'needs_conf_edit': True
+        },
+        'model_chorus_bs_roformer_ep_267 (by Sucial)': {
+            'model_type': 'bs_roformer',
+            'config_path': os.path.join(CHECKPOINT_DIR, 'config_chorus_male_female_bs_roformer.yaml'),
+            'start_check_point': os.path.join(CHECKPOINT_DIR, 'model_chorus_bs_roformer_ep_267_sdr_24.1275.ckpt'),
+            'download_urls': [
+                'https://huggingface.co/Sucial/Chorus_Male_Female_BS_Roformer/resolve/main/config_chorus_male_female_bs_roformer.yaml',
+                'https://huggingface.co/Sucial/Chorus_Male_Female_BS_Roformer/resolve/main/model_chorus_bs_roformer_ep_267_sdr_24.1275.ckpt'
+            ],
+            'needs_conf_edit': True
+        },
+        'BS-Rofo-SW-Fixed (by jarredou)': {
+            'model_type': 'bs_roformer',
+            'config_path': os.path.join(CHECKPOINT_DIR, 'BS-Rofo-SW-Fixed.yaml'),
+            'start_check_point': os.path.join(CHECKPOINT_DIR, 'BS-Rofo-SW-Fixed.ckpt'),
+            'download_urls': [
+                'https://huggingface.co/jarredou/BS-ROFO-SW-Fixed/resolve/main/BS-Rofo-SW-Fixed.yaml',
+                'https://huggingface.co/jarredou/BS-ROFO-SW-Fixed/resolve/main/BS-Rofo-SW-Fixed.ckpt'
+            ],
+            'needs_conf_edit': True
+        },
+        'BS_ResurrectioN (by Gabox)': {
+            'model_type': 'bs_roformer',
+            'config_path': os.path.join(CHECKPOINT_DIR, 'BS-Roformer-Resurrection-Inst-Config.yaml'),
+            'start_check_point': os.path.join(CHECKPOINT_DIR, 'BS_ResurrectioN.ckpt'),
+            'download_urls': [
+                'https://huggingface.co/pcunwa/BS-Roformer-Resurrection/resolve/main/BS-Roformer-Resurrection-Inst-Config.yaml',
+                'https://huggingface.co/GaboxR67/MelBandRoformers/resolve/main/melbandroformers/experimental/BS_ResurrectioN.ckpt'
             ],
             'needs_conf_edit': True
         }
@@ -504,6 +636,86 @@ MODEL_CONFIGS = {
                 'https://huggingface.co/GaboxR67/MelBandRoformers/resolve/main/melbandroformers/instrumental/Inst_GaboxV7.ckpt'
             ],
             'needs_conf_edit': True
+        },
+        'inst_Fv4 (by Gabox)': {
+            'model_type': 'mel_band_roformer',
+            'config_path': os.path.join(CHECKPOINT_DIR, 'inst_gabox.yaml'),
+            'start_check_point': os.path.join(CHECKPOINT_DIR, 'inst_Fv4.ckpt'),
+            'download_urls': [
+                'https://huggingface.co/GaboxR67/MelBandRoformers/resolve/main/melbandroformers/instrumental/inst_gabox.yaml',
+                'https://huggingface.co/GaboxR67/MelBandRoformers/resolve/main/melbandroformers/instrumental/inst_Fv4.ckpt'
+            ],
+            'needs_conf_edit': True
+        },
+        'INSTV7N (by Gabox)': {
+            'model_type': 'mel_band_roformer',
+            'config_path': os.path.join(CHECKPOINT_DIR, 'inst_gabox.yaml'),
+            'start_check_point': os.path.join(CHECKPOINT_DIR, 'INSTV7N.ckpt'),
+            'download_urls': [
+                'https://huggingface.co/GaboxR67/MelBandRoformers/resolve/main/melbandroformers/instrumental/inst_gabox.yaml',
+                'https://huggingface.co/GaboxR67/MelBandRoformers/resolve/main/melbandroformers/instrumental/INSTV7N.ckpt'
+            ],
+            'needs_conf_edit': True
+        },
+        'inst_fv7b (by Gabox)': {
+            'model_type': 'mel_band_roformer',
+            'config_path': os.path.join(CHECKPOINT_DIR, 'inst_gabox.yaml'),
+            'start_check_point': os.path.join(CHECKPOINT_DIR, 'inst_fv7b.ckpt'),
+            'download_urls': [
+                'https://huggingface.co/GaboxR67/MelBandRoformers/resolve/main/melbandroformers/instrumental/inst_gabox.yaml',
+                'https://huggingface.co/GaboxR67/MelBandRoformers/resolve/main/melbandroformers/experimental/inst_fv7b.ckpt'
+            ],
+            'needs_conf_edit': True
+        },
+        'inst_fv7z (by Gabox)': {
+            'model_type': 'mel_band_roformer',
+            'config_path': os.path.join(CHECKPOINT_DIR, 'inst_gabox.yaml'),
+            'start_check_point': os.path.join(CHECKPOINT_DIR, 'Inst_GaboxFv7z.ckpt'),
+            'download_urls': [
+                'https://huggingface.co/GaboxR67/MelBandRoformers/resolve/main/melbandroformers/instrumental/inst_gabox.yaml',
+                'https://huggingface.co/GaboxR67/MelBandRoformers/resolve/main/melbandroformers/instrumental/Inst_GaboxFv7z.ckpt'
+            ],
+            'needs_conf_edit': True
+        },
+        'Inst_GaboxFv9 (by Gabox)': {
+            'model_type': 'mel_band_roformer',
+            'config_path': os.path.join(CHECKPOINT_DIR, 'inst_gabox.yaml'),
+            'start_check_point': os.path.join(CHECKPOINT_DIR, 'Inst_GaboxFv9.ckpt'),
+            'download_urls': [
+                'https://huggingface.co/GaboxR67/MelBandRoformers/resolve/main/melbandroformers/instrumental/inst_gabox.yaml',
+                'https://huggingface.co/GaboxR67/MelBandRoformers/resolve/main/melbandroformers/instrumental/Inst_GaboxFv9.ckpt'
+            ],
+            'needs_conf_edit': True
+        },
+        'inst_gaboxFlowersV10 (by Gabox)': {
+            'model_type': 'mel_band_roformer',
+            'config_path': os.path.join(CHECKPOINT_DIR, 'v10.yaml'),
+            'start_check_point': os.path.join(CHECKPOINT_DIR, 'inst_gaboxFlowersV10.ckpt'),
+            'download_urls': [
+                'https://huggingface.co/GaboxR67/MelBandRoformers/resolve/main/melbandroformers/instrumental/v10.yaml',
+                'https://huggingface.co/GaboxR67/MelBandRoformers/resolve/main/melbandroformers/instrumental/inst_gaboxFlowersV10.ckpt'
+            ],
+            'needs_conf_edit': True
+        },
+        'Inst_FV8b (by Gabox)': {
+            'model_type': 'mel_band_roformer',
+            'config_path': os.path.join(CHECKPOINT_DIR, 'inst_gabox.yaml'),
+            'start_check_point': os.path.join(CHECKPOINT_DIR, 'Inst_FV8b.ckpt'),
+            'download_urls': [
+                'https://huggingface.co/GaboxR67/MelBandRoformers/resolve/main/melbandroformers/instrumental/inst_gabox.yaml',
+                'https://huggingface.co/GaboxR67/MelBandRoformers/resolve/main/melbandroformers/experimental/Inst_FV8b.ckpt'
+            ],
+            'needs_conf_edit': True
+        },
+        'Inst_Fv8 (by Gabox)': {
+            'model_type': 'mel_band_roformer',
+            'config_path': os.path.join(CHECKPOINT_DIR, 'inst_gabox.yaml'),
+            'start_check_point': os.path.join(CHECKPOINT_DIR, 'Inst_Fv8.ckpt'),
+            'download_urls': [
+                'https://huggingface.co/GaboxR67/MelBandRoformers/resolve/main/melbandroformers/instrumental/inst_gabox.yaml',
+                'https://huggingface.co/GaboxR67/MelBandRoformers/resolve/main/melbandroformers/experimental/Inst_Fv8.ckpt'
+            ],
+            'needs_conf_edit': True
         }
     },
     "4-Stem Models": {
@@ -660,6 +872,56 @@ MODEL_CONFIGS = {
                 'https://huggingface.co/anvuew/dereverb_mel_band_roformer/resolve/main/dereverb_mel_band_roformer_mono_anvuew_sdr_20.4029.ckpt'
             ],
             'needs_conf_edit': True
+        },
+        'dereverb-echo_128_4_4 (by Sucial)': {
+            'model_type': 'mel_band_roformer',
+            'config_path': os.path.join(CHECKPOINT_DIR, 'config_dereverb-echo_128_4_4_mel_band_roformer.yaml'),
+            'start_check_point': os.path.join(CHECKPOINT_DIR, 'dereverb-echo_128_4_4_mel_band_roformer_sdr_dry_12.4235.ckpt'),
+            'download_urls': [
+                'https://huggingface.co/Sucial/Dereverb-Echo_Mel_Band_Roformer/resolve/main/config_dereverb-echo_128_4_4_mel_band_roformer.yaml',
+                'https://huggingface.co/Sucial/Dereverb-Echo_Mel_Band_Roformer/resolve/main/dereverb-echo_128_4_4_mel_band_roformer_sdr_dry_12.4235.ckpt'
+            ],
+            'needs_conf_edit': True
+        },
+        'dereverb_echo_mbr_v2 (by Sucial)': {
+            'model_type': 'mel_band_roformer',
+            'config_path': os.path.join(CHECKPOINT_DIR, 'config_dereverb_echo_mbr_v2.yaml'),
+            'start_check_point': os.path.join(CHECKPOINT_DIR, 'dereverb_echo_mbr_v2_sdr_dry_13.4843.ckpt'),
+            'download_urls': [
+                'https://huggingface.co/Sucial/Dereverb-Echo_Mel_Band_Roformer/resolve/main/config_dereverb_echo_mbr_v2.yaml',
+                'https://huggingface.co/Sucial/Dereverb-Echo_Mel_Band_Roformer/resolve/main/dereverb_echo_mbr_v2_sdr_dry_13.4843.ckpt'
+            ],
+            'needs_conf_edit': True
+        },
+        'de_big_reverb_mbr_ep_362 (by Sucial)': {
+            'model_type': 'mel_band_roformer',
+            'config_path': os.path.join(CHECKPOINT_DIR, 'config_dereverb_echo_mbr_v2.yaml'),
+            'start_check_point': os.path.join(CHECKPOINT_DIR, 'de_big_reverb_mbr_ep_362.ckpt'),
+            'download_urls': [
+                'https://huggingface.co/Sucial/Dereverb-Echo_Mel_Band_Roformer/resolve/main/config_dereverb_echo_mbr_v2.yaml',
+                'https://huggingface.co/Sucial/Dereverb-Echo_Mel_Band_Roformer/resolve/main/de_big_reverb_mbr_ep_362.ckpt'
+            ],
+            'needs_conf_edit': True
+        },
+        'de_super_big_reverb_mbr_ep_346 (by Sucial)': {
+            'model_type': 'mel_band_roformer',
+            'config_path': os.path.join(CHECKPOINT_DIR, 'config_dereverb_echo_mbr_v2.yaml'),
+            'start_check_point': os.path.join(CHECKPOINT_DIR, 'de_super_big_reverb_mbr_ep_346.ckpt'),
+            'download_urls': [
+                'https://huggingface.co/Sucial/Dereverb-Echo_Mel_Band_Roformer/resolve/main/config_dereverb_echo_mbr_v2.yaml',
+                'https://huggingface.co/Sucial/Dereverb-Echo_Mel_Band_Roformer/resolve/main/de_super_big_reverb_mbr_ep_346.ckpt'
+            ],
+            'needs_conf_edit': True
+        },
+        'dereverb_room (by anvuew)': {
+            'model_type': 'bs_roformer',
+            'config_path': os.path.join(CHECKPOINT_DIR, 'dereverb_room_anvuew.yaml'),
+            'start_check_point': os.path.join(CHECKPOINT_DIR, 'dereverb_room_anvuew_sdr_13.7432.ckpt'),
+            'download_urls': [
+                'https://huggingface.co/anvuew/dereverb_room/resolve/main/dereverb_room_anvuew.yaml',
+                'https://huggingface.co/anvuew/dereverb_room/resolve/main/dereverb_room_anvuew_sdr_13.7432.ckpt'
+            ],
+            'needs_conf_edit': True
         }
     },
     "Karaoke": {
@@ -673,13 +935,53 @@ MODEL_CONFIGS = {
             ],
             'needs_conf_edit': True
         },
-        'KaraokeGabox': {
+        'KaraokeGabox (by Gabox)': {
             'model_type': 'mel_band_roformer',
-            'config_path': os.path.join(CHECKPOINT_DIR, 'config_mel_band_roformer_karaoke.yaml'),
-            'start_check_point': os.path.join(CHECKPOINT_DIR, 'KaraokeGabox.ckpt'),
+            'config_path': os.path.join(CHECKPOINT_DIR, 'karaokegabox_1750911344.yaml'),
+            'start_check_point': os.path.join(CHECKPOINT_DIR, 'Karaoke_GaboxV1.ckpt'),
             'download_urls': [
-                'https://github.com/deton24/Colab-for-new-MDX_UVR_models/releases/download/v1.0.0/config_mel_band_roformer_karaoke.yaml',
-                'https://huggingface.co/GaboxR67/MelBandRoformers/blob/main/melbandroformers/experimental/KaraokeGabox.ckpt'
+                'https://huggingface.co/GaboxR67/MelBandRoformers/resolve/main/melbandroformers/karaoke/karaokegabox_1750911344.yaml',
+                'https://huggingface.co/GaboxR67/MelBandRoformers/resolve/main/melbandroformers/karaoke/Karaoke_GaboxV1.ckpt'
+            ],
+            'needs_conf_edit': True
+        },
+        'bs_karaoke_gabox_IS (by Gabox)': {
+            'model_type': 'bs_roformer',
+            'config_path': os.path.join(CHECKPOINT_DIR, 'karaoke_bs_roformer.yaml'),
+            'start_check_point': os.path.join(CHECKPOINT_DIR, 'bs_karaoke_gabox_IS.ckpt'),
+            'download_urls': [
+                'https://huggingface.co/GaboxR67/MelBandRoformers/resolve/main/bsroformers/karaoke_bs_roformer.yaml',
+                'https://huggingface.co/GaboxR67/MelBandRoformers/resolve/main/bsroformers/bs_karaoke_gabox_IS.ckpt'
+            ],
+            'needs_conf_edit': True
+        },
+        'bs_roformer_karaoke_frazer_becruily': {
+            'model_type': 'bs_roformer',
+            'config_path': os.path.join(CHECKPOINT_DIR, 'config_karaoke_frazer_becruily.yaml'),
+            'start_check_point': os.path.join(CHECKPOINT_DIR, 'bs_roformer_karaoke_frazer_becruily.ckpt'),
+            'download_urls': [
+                'https://huggingface.co/becruily/bs-roformer-karaoke/resolve/main/config_karaoke_frazer_becruily.yaml',
+                'https://huggingface.co/becruily/bs-roformer-karaoke/resolve/main/bs_roformer_karaoke_frazer_becruily.ckpt'
+            ],
+            'needs_conf_edit': True
+        },
+        'karaoke_bs_roformer_anvuew': {
+            'model_type': 'bs_roformer',
+            'config_path': os.path.join(CHECKPOINT_DIR, 'karaoke_bs_roformer_anvuew.yaml'),
+            'start_check_point': os.path.join(CHECKPOINT_DIR, 'karaoke_bs_roformer_anvuew.ckpt'),
+            'download_urls': [
+                'https://huggingface.co/anvuew/karaoke_bs_roformer/resolve/main/karaoke_bs_roformer_anvuew.yaml',
+                'https://huggingface.co/anvuew/karaoke_bs_roformer/resolve/main/karaoke_bs_roformer_anvuew.ckpt'
+            ],
+            'needs_conf_edit': True
+        },
+        'mel_band_roformer_karaoke_becruily': {
+            'model_type': 'mel_band_roformer',
+            'config_path': os.path.join(CHECKPOINT_DIR, 'config_karaoke_becruily.yaml'),
+            'start_check_point': os.path.join(CHECKPOINT_DIR, 'mel_band_roformer_karaoke_becruily.ckpt'),
+            'download_urls': [
+                'https://huggingface.co/becruily/mel-band-roformer-karaoke/resolve/main/config_karaoke_becruily.yaml',
+                'https://huggingface.co/becruily/mel-band-roformer-karaoke/resolve/main/mel_band_roformer_karaoke_becruily.ckpt'
             ],
             'needs_conf_edit': True
         }
@@ -764,6 +1066,241 @@ MODEL_CONFIGS = {
                 'https://huggingface.co/SYH99999/MelBandRoformerSYHFTB1/resolve/main/model3.ckpt'
             ],
             'needs_conf_edit': True
+        },
+        'bs_roformer_fno (by unwa)': {
+            'model_type': 'bs_roformer_custom',
+            'config_path': os.path.join(CHECKPOINT_DIR, 'bsrofo_fno.yaml'),
+            'start_check_point': os.path.join(CHECKPOINT_DIR, 'bs_roformer_fno.ckpt'),
+            'download_urls': [
+                'https://huggingface.co/pcunwa/BS-Roformer-Inst-FNO/resolve/main/bsrofo_fno.yaml',
+                'https://huggingface.co/pcunwa/BS-Roformer-Inst-FNO/resolve/main/bs_roformer_fno.ckpt'
+            ],
+            'custom_model_url': 'https://huggingface.co/listra92/MyModels/resolve/main/misc/bs_roformer.py',
+            'needs_conf_edit': True
+        },
+        'bs_hyperace (by unwa)': {
+            'model_type': 'bs_roformer_custom',
+            'config_path': os.path.join(CHECKPOINT_DIR, 'config_hyperace.yaml'),
+            'start_check_point': os.path.join(CHECKPOINT_DIR, 'bs_hyperace.ckpt'),
+            'download_urls': [
+                'https://huggingface.co/pcunwa/BS-Roformer-HyperACE/resolve/main/config.yaml',
+                'https://huggingface.co/pcunwa/BS-Roformer-HyperACE/resolve/main/bs_hyperace.ckpt'
+            ],
+            'custom_model_url': 'https://huggingface.co/pcunwa/BS-Roformer-HyperACE/resolve/main/bs_roformer.py',
+            'needs_conf_edit': True
+        },
+        'bs_roformer_inst_hyperacev2 (by unwa)': {
+            'model_type': 'bs_roformer_custom',
+            'config_path': os.path.join(CHECKPOINT_DIR, 'config_hyperacev2_inst.yaml'),
+            'start_check_point': os.path.join(CHECKPOINT_DIR, 'bs_roformer_inst_hyperacev2.ckpt'),
+            'download_urls': [
+                'https://huggingface.co/pcunwa/BS-Roformer-HyperACE/resolve/main/v2_inst/config.yaml',
+                'https://huggingface.co/pcunwa/BS-Roformer-HyperACE/resolve/main/v2_inst/bs_roformer_inst_hyperacev2.ckpt'
+            ],
+            'custom_model_url': 'https://huggingface.co/pcunwa/BS-Roformer-HyperACE/resolve/main/v2_inst/bs_roformer.py',
+            'needs_conf_edit': True
+        },
+        'bs_roformer_voc_hyperacev2 (by unwa)': {
+            'model_type': 'bs_roformer_custom',
+            'config_path': os.path.join(CHECKPOINT_DIR, 'config_hyperacev2_voc.yaml'),
+            'start_check_point': os.path.join(CHECKPOINT_DIR, 'bs_roformer_voc_hyperacev2.ckpt'),
+            'download_urls': [
+                'https://huggingface.co/pcunwa/BS-Roformer-HyperACE/resolve/main/v2_voc/config.yaml',
+                'https://huggingface.co/pcunwa/BS-Roformer-HyperACE/resolve/main/v2_voc/bs_roformer_voc_hyperacev2.ckpt'
+            ],
+            'custom_model_url': 'https://huggingface.co/pcunwa/BS-Roformer-HyperACE/resolve/main/v2_voc/bs_roformer.py',
+            'needs_conf_edit': True
+        },
+        'BS-Roformer-Large-Inst (by unwa)': {
+            'model_type': 'bs_roformer_custom',
+            'config_path': os.path.join(CHECKPOINT_DIR, 'config_bs_large_inst.yaml'),
+            'start_check_point': os.path.join(CHECKPOINT_DIR, 'bs_large_v2_inst.ckpt'),
+            'download_urls': [
+                'https://huggingface.co/pcunwa/BS-Roformer-Large-Inst/resolve/main/config.yaml',
+                'https://huggingface.co/pcunwa/BS-Roformer-Large-Inst/resolve/main/bs_large_v2_inst.ckpt'
+            ],
+            'custom_model_url': 'https://huggingface.co/pcunwa/BS-Roformer-Large-Inst/resolve/main/bs_roformer.py',
+            'needs_conf_edit': True
+        },
+        'Rifforge_final_sdr_14.24 (by meskvlla33)': {
+            'model_type': 'mel_band_roformer',
+            'config_path': os.path.join(CHECKPOINT_DIR, 'config_rifforge_full_mesk.yaml'),
+            'start_check_point': os.path.join(CHECKPOINT_DIR, 'rifforge_full_sdr_14.2436.ckpt'),
+            'download_urls': [
+                'https://huggingface.co/meskvlla33/rifforge/resolve/main/config_rifforge_full_mesk.yaml',
+                'https://huggingface.co/meskvlla33/rifforge/resolve/main/rifforge_full_sdr_14.2436.ckpt'
+            ],
+            'needs_conf_edit': True
+        },
+        'bs_roformer_revive (by unwa)': {
+            'model_type': 'bs_roformer',
+            'config_path': os.path.join(CHECKPOINT_DIR, 'config_revive.yaml'),
+            'start_check_point': os.path.join(CHECKPOINT_DIR, 'bs_roformer_revive.ckpt'),
+            'download_urls': [
+                'https://huggingface.co/pcunwa/BS-Roformer-Revive/resolve/main/config.yaml',
+                'https://huggingface.co/pcunwa/BS-Roformer-Revive/resolve/main/bs_roformer_revive.ckpt'
+            ],
+            'needs_conf_edit': True
+        },
+        'bs_roformer_revive2 (by unwa)': {
+            'model_type': 'bs_roformer',
+            'config_path': os.path.join(CHECKPOINT_DIR, 'config_revive.yaml'),
+            'start_check_point': os.path.join(CHECKPOINT_DIR, 'bs_roformer_revive2.ckpt'),
+            'download_urls': [
+                'https://huggingface.co/pcunwa/BS-Roformer-Revive/resolve/main/config.yaml',
+                'https://huggingface.co/pcunwa/BS-Roformer-Revive/resolve/main/bs_roformer_revive2.ckpt'
+            ],
+            'needs_conf_edit': True
+        },
+        'bs_roformer_revive3e (by unwa)': {
+            'model_type': 'bs_roformer',
+            'config_path': os.path.join(CHECKPOINT_DIR, 'config_revive.yaml'),
+            'start_check_point': os.path.join(CHECKPOINT_DIR, 'bs_roformer_revive3e.ckpt'),
+            'download_urls': [
+                'https://huggingface.co/pcunwa/BS-Roformer-Revive/resolve/main/config.yaml',
+                'https://huggingface.co/pcunwa/BS-Roformer-Revive/resolve/main/bs_roformer_revive3e.ckpt'
+            ],
+            'needs_conf_edit': True
+        },
+        'BS-Roformer-Resurrection (by unwa)': {
+            'model_type': 'bs_roformer',
+            'config_path': os.path.join(CHECKPOINT_DIR, 'BS-Roformer-Resurrection-Config.yaml'),
+            'start_check_point': os.path.join(CHECKPOINT_DIR, 'BS-Roformer-Resurrection.ckpt'),
+            'download_urls': [
+                'https://huggingface.co/pcunwa/BS-Roformer-Resurrection/resolve/main/BS-Roformer-Resurrection-Config.yaml',
+                'https://huggingface.co/pcunwa/BS-Roformer-Resurrection/resolve/main/BS-Roformer-Resurrection.ckpt'
+            ],
+            'needs_conf_edit': True
+        },
+        'BS-Roformer-Resurrection-Inst (by unwa)': {
+            'model_type': 'bs_roformer',
+            'config_path': os.path.join(CHECKPOINT_DIR, 'BS-Roformer-Resurrection-Inst-Config.yaml'),
+            'start_check_point': os.path.join(CHECKPOINT_DIR, 'BS-Roformer-Resurrection-Inst.ckpt'),
+            'download_urls': [
+                'https://huggingface.co/pcunwa/BS-Roformer-Resurrection/resolve/main/BS-Roformer-Resurrection-Inst-Config.yaml',
+                'https://huggingface.co/pcunwa/BS-Roformer-Resurrection/resolve/main/BS-Roformer-Resurrection-Inst.ckpt'
+            ],
+            'needs_conf_edit': True
+        },
+        'inst_gaboxFlowersV10 (by Gabox)': {
+            'model_type': 'mel_band_roformer',
+            'config_path': os.path.join(CHECKPOINT_DIR, 'v10.yaml'),
+            'start_check_point': os.path.join(CHECKPOINT_DIR, 'inst_gaboxFlowersV10.ckpt'),
+            'download_urls': [
+                'https://huggingface.co/GaboxR67/MelBandRoformers/resolve/main/melbandroformers/instrumental/v10.yaml',
+                'https://huggingface.co/GaboxR67/MelBandRoformers/resolve/main/melbandroformers/instrumental/inst_gaboxFlowersV10.ckpt'
+            ],
+            'needs_conf_edit': True
+        },
+        'Neo_InstVFX (by natanworkspace)': {
+            'model_type': 'mel_band_roformer',
+            'config_path': os.path.join(CHECKPOINT_DIR, 'config_neo_inst.yaml'),
+            'start_check_point': os.path.join(CHECKPOINT_DIR, 'Neo_InstVFX.ckpt'),
+            'download_urls': [
+                'https://huggingface.co/natanworkspace/melband_roformer/resolve/main/config_neo_inst.yaml',
+                'https://huggingface.co/natanworkspace/melband_roformer/resolve/main/Neo_InstVFX.ckpt'
+            ],
+            'needs_conf_edit': True
+        },
+        'becruily_deux (by becruily)': {
+            'model_type': 'mel_band_roformer',
+            'config_path': os.path.join(CHECKPOINT_DIR, 'config_deux_becruily.yaml'),
+            'start_check_point': os.path.join(CHECKPOINT_DIR, 'becruily_deux.ckpt'),
+            'download_urls': [
+                'https://huggingface.co/becruily/mel-band-roformer-deux/resolve/main/config_deux_becruily.yaml',
+                'https://huggingface.co/becruily/mel-band-roformer-deux/resolve/main/becruily_deux.ckpt'
+            ],
+            'needs_conf_edit': True
+        },
+        'becruily_guitar (by becruily)': {
+            'model_type': 'mel_band_roformer',
+            'config_path': os.path.join(CHECKPOINT_DIR, 'config_guitar_becruily.yaml'),
+            'start_check_point': os.path.join(CHECKPOINT_DIR, 'becruily_guitar.ckpt'),
+            'download_urls': [
+                'https://huggingface.co/becruily/mel-band-roformer-guitar/resolve/main/config_guitar_becruily.yaml',
+                'https://huggingface.co/becruily/mel-band-roformer-guitar/resolve/main/becruily_guitar.ckpt'
+            ],
+            'needs_conf_edit': True
+        },
+        'karaoke_bs_roformer_anvuew (by anvuew)': {
+            'model_type': 'bs_roformer',
+            'config_path': os.path.join(CHECKPOINT_DIR, 'karaoke_bs_roformer_anvuew.yaml'),
+            'start_check_point': os.path.join(CHECKPOINT_DIR, 'karaoke_bs_roformer_anvuew.ckpt'),
+            'download_urls': [
+                'https://huggingface.co/anvuew/karaoke_bs_roformer/resolve/main/karaoke_bs_roformer_anvuew.yaml',
+                'https://huggingface.co/anvuew/karaoke_bs_roformer/resolve/main/karaoke_bs_roformer_anvuew.ckpt'
+            ],
+            'needs_conf_edit': True
+        },
+        'aspiration_mel_band_roformer (by Sucial)': {
+            'model_type': 'mel_band_roformer',
+            'config_path': os.path.join(CHECKPOINT_DIR, 'config_aspiration_mel_band_roformer.yaml'),
+            'start_check_point': os.path.join(CHECKPOINT_DIR, 'aspiration_mel_band_roformer_sdr_18.9845.ckpt'),
+            'download_urls': [
+                'https://huggingface.co/Sucial/Aspiration_Mel_Band_Roformer/resolve/main/config_aspiration_mel_band_roformer.yaml',
+                'https://huggingface.co/Sucial/Aspiration_Mel_Band_Roformer/resolve/main/aspiration_mel_band_roformer_sdr_18.9845.ckpt'
+            ],
+            'needs_conf_edit': True
+        },
+        'dereverb_echo_mbr_v2 (by Sucial)': {
+            'model_type': 'mel_band_roformer',
+            'config_path': os.path.join(CHECKPOINT_DIR, 'config_dereverb_echo_mbr_v2.yaml'),
+            'start_check_point': os.path.join(CHECKPOINT_DIR, 'dereverb_echo_mbr_v2_sdr_dry_13.4843.ckpt'),
+            'download_urls': [
+                'https://huggingface.co/Sucial/Dereverb-Echo_Mel_Band_Roformer/resolve/main/config_dereverb_echo_mbr_v2.yaml',
+                'https://huggingface.co/Sucial/Dereverb-Echo_Mel_Band_Roformer/resolve/main/dereverb_echo_mbr_v2_sdr_dry_13.4843.ckpt'
+            ],
+            'needs_conf_edit': True
+        },
+        'mdx23c_similarity (by ZFTurbo)': {
+            'model_type': 'mdx23c',
+            'config_path': os.path.join(CHECKPOINT_DIR, 'config_mdx23c_similarity.yaml'),
+            'start_check_point': os.path.join(CHECKPOINT_DIR, 'model_mdx23c_ep_271_l1_freq_72.2383.ckpt'),
+            'download_urls': [
+                'https://github.com/ZFTurbo/Music-Source-Separation-Training/releases/download/v1.0.10/config_mdx23c_similarity.yaml',
+                'https://github.com/ZFTurbo/Music-Source-Separation-Training/releases/download/v1.0.10/model_mdx23c_ep_271_l1_freq_72.2383.ckpt'
+            ],
+            'needs_conf_edit': False
+        },
+        'mel_band_roformer_Lead_Rhythm_Guitar (by listra92)': {
+            'model_type': 'mel_band_roformer',
+            'config_path': os.path.join(CHECKPOINT_DIR, 'config_mel_band_roformer_Lead_Rhythm_Guitar.yaml'),
+            'start_check_point': os.path.join(CHECKPOINT_DIR, 'model_mel_band_roformer_ep_72_sdr_3.2232.ckpt'),
+            'download_urls': [
+                'https://huggingface.co/listra92/MyModels/resolve/main/misc/config_mel_band_roformer_Lead_Rhythm_Guitar.yaml',
+                'https://huggingface.co/listra92/MyModels/resolve/main/misc/model_mel_band_roformer_ep_72_sdr_3.2232.ckpt'
+            ],
+            'needs_conf_edit': True
+        },
+        'last_bs_roformer_4stem (by Amane)': {
+            'model_type': 'bs_roformer',
+            'config_path': os.path.join(CHECKPOINT_DIR, 'config_last_bs.yaml'),
+            'start_check_point': os.path.join(CHECKPOINT_DIR, 'last_bs_roformer.ckpt'),
+            'download_urls': [
+                'https://huggingface.co/listra92/MyModels/resolve/main/misc/config.yaml',
+                'https://huggingface.co/listra92/MyModels/resolve/main/misc/last_bs_roformer.ckpt'
+            ],
+            'needs_conf_edit': True
+        },
+        'bs_roformer_4stems_ft (by SYH99999)': {
+            'model_type': 'bs_roformer',
+            'config_path': os.path.join(CHECKPOINT_DIR, 'config_bs_4stems_ft.yaml'),
+            'start_check_point': os.path.join(CHECKPOINT_DIR, 'bs_roformer_4stems_ft.pth'),
+            'download_urls': [
+                'https://huggingface.co/SYH99999/bs_roformer_4stems_ft/resolve/main/config.yaml',
+                'https://huggingface.co/SYH99999/bs_roformer_4stems_ft/resolve/main/bs_roformer_4stems_ft.pth'
+            ],
+            'needs_conf_edit': True
+        },
+        'CINEMATIC-BandIt_v2_Eng (by kwatcharasupat)': {
+            'model_type': 'bandit_v2',
+            'config_path': os.path.join(CHECKPOINT_DIR, 'config_dnr_bandit_v2_mus64.yaml'),
+            'start_check_point': os.path.join(CHECKPOINT_DIR, 'checkpoint-eng_state_dict.ckpt'),
+            'download_urls': [
+                'https://huggingface.co/jarredou/banditv2_state_dicts_only/resolve/main/config_dnr_bandit_v2_mus64.yaml',
+                'https://huggingface.co/jarredou/banditv2_state_dicts_only/resolve/main/checkpoint-eng_state_dict.ckpt'
+            ],
+            'needs_conf_edit': True
         }
     }
 }
@@ -778,6 +1315,10 @@ def get_model_config(clean_model=None, chunk_size=None, overlap=None):
             config = category[clean_model]
             for url in config['download_urls']:
                 download_file(url)
+            if config.get('custom_model_url'):
+                custom_path = os.path.join(BASE_DIR, 'models', 'bs_roformer', 'bs_roformer_custom')
+                os.makedirs(custom_path, exist_ok=True)
+                download_file(config['custom_model_url'], path=custom_path)
             if config['needs_conf_edit'] and chunk_size is not None and overlap is not None:
                 conf_edit(config['config_path'], chunk_size, overlap)
             return config['model_type'], config['config_path'], config['start_check_point']

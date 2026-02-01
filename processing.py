@@ -37,7 +37,15 @@ import re
 import psutil
 import concurrent.futures
 from tqdm import tqdm
-from google.oauth2.credentials import Credentials
+
+# Google OAuth imports (optional - for Colab/Google Drive support)
+try:
+    from google.oauth2.credentials import Credentials
+    GOOGLE_OAUTH_AVAILABLE = True
+except ImportError:
+    GOOGLE_OAUTH_AVAILABLE = False
+    Credentials = None
+
 import tempfile
 from urllib.parse import urlparse, quote
 try:

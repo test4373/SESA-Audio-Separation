@@ -128,6 +128,30 @@ def get_model_from_config(model_type: str, config_path: str) -> Tuple:
     elif model_type == 'experimental_mdx23c_stht':
         from models.mdx23c_tfc_tdf_v3_with_STHT import TFC_TDF_net
         model = TFC_TDF_net(config)
+    elif model_type == 'mel_band_roformer_experimental':
+        from models.bs_roformer.mel_band_roformer_experimental import MelBandRoformer
+        model = MelBandRoformer(**dict(config.model))
+    elif model_type == 'bs_roformer_experimental':
+        from models.bs_roformer.bs_roformer_experimental import BSRoformer
+        model = BSRoformer(**dict(config.model))
+    elif model_type == 'scnet_tran':
+        from models.scnet.scnet_tran import SCNet_Tran
+        model = SCNet_Tran(**config.model)
+    elif model_type == 'scnet_masked':
+        from models.scnet.scnet_masked import SCNet
+        model = SCNet(**config.model)
+    elif model_type == 'conformer':
+        from models.conformer_model import ConformerMSS, NeuralModel
+        model = ConformerMSS(
+            core=NeuralModel(**config.model),
+            n_fft=config.stft.n_fft,
+            hop_length=config.stft.hop_length,
+            win_length=getattr(config.stft, 'win_length', config.stft.n_fft),
+            center=config.stft.center
+        )
+    elif model_type == 'mel_band_conformer':
+        from models.mel_band_conformer import MelBandConformer
+        model = MelBandConformer(**config.model)
     else:
         raise ValueError(f"Unknown model type: {model_type}")
 
