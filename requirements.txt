@@ -5,6 +5,7 @@ numpy
 pandas
 scipy
 torch
+torchaudio
 torchvision
 torchmetrics
 ml_collections
