@@ -285,6 +285,14 @@ class SCNet(nn.Module):
             'kernel': conv_kernel,
         }
 
+        self.embed_dim = dims[0]
+        self.max_f = nfft // 2 + 1
+        self.pos_embed_f = nn.Parameter(torch.zeros(1, self.embed_dim, self.max_f, 1))
+        nn.init.trunc_normal_(self.pos_embed_f, std=.02)
+
+        window = torch.hann_window(window_length=nfft, periodic=True)
+        self.register_buffer('window', window, persistent=False)
+
         self.stft_config = {
             'n_fft': nfft,
             'hop_length': hop_size,
@@ -322,6 +330,23 @@ class SCNet(nn.Module):
             num_layers=num_dplayer,
         )
 
+        self.mask_layer = nn.Sequential(
+            nn.Conv2d(
+                4 * len(self.sources),
+                64,
+                kernel_size=3,
+                padding="same"
+            ),
+            nn.GELU(),
+            nn.Conv2d(
+                64,
+                4 * len(self.sources),
+                kernel_size=1,
+                padding="same",
+            ),
+            nn.Tanh()
+        )
+
     def forward(self, x):
         # B, C, L = x.shape
         B = x.shape[0]
@@ -335,12 +360,23 @@ class SCNet(nn.Module):
         # STFT
         L = x.shape[-1]
         x = x.reshape(-1, L)
-        x = torch.stft(x, **self.stft_config, return_complex=True)
+        stft_opts = {**self.stft_config, 'window': self.window.to(x.device)}
+        x = torch.stft(x, **stft_opts, return_complex=True)
         x = torch.view_as_real(x)
-        x = x.permute(0, 3, 1, 2).reshape(x.shape[0] // self.audio_channels, x.shape[3] * self.audio_channels,
-                                          x.shape[1], x.shape[2])
+        x = x.permute(0, 3, 1, 2).reshape(x.shape[0] // self.audio_channels, x.shape[3] * self.audio_channels, x.shape[1], x.shape[2])
 
         B, C, Fr, T = x.shape
+
+        assert C == self.embed_dim, f"Input channel dimension {C} after STFT/reshape doesn't match self.embed_dim {self.embed_dim}"
+        mixture = x.repeat(1, len(self.sources), 1, 1)
+
+        if Fr > self.max_f:
+             print(f"Warning: Input frequency dim {Fr} > max_f {self.max_f}. Positional embedding will be truncated/repeated.")
+             repeats = math.ceil(Fr / self.max_f)
+             pos_f = self.pos_embed_f.repeat(1, 1, repeats, 1)[:, :, :Fr, :]
+        else:
+             pos_f = self.pos_embed_f[:, :, :Fr, :]
+        x = x + pos_f
 
         save_skip = deque()
         save_lengths = deque()
@@ -360,12 +396,22 @@ class SCNet(nn.Module):
             x = fusion_layer(x, save_skip.pop())
             x = su_layer(x, save_lengths.pop(), save_original_lengths.pop())
 
+        mask = self.mask_layer(x)
+
         # output
         n = self.dims[0]
-        x = x.view(B, n, -1, Fr, T)
-        x = x.reshape(-1, 2, Fr, T).permute(0, 2, 3, 1)
-        x = torch.view_as_complex(x.contiguous())
-        x = torch.istft(x, **self.stft_config)
+
+        mixture = mixture.view(B, n, -1, Fr, T)
+        mixture = mixture.reshape(-1, 2, Fr, T).permute(0, 2, 3, 1)
+        mixture = torch.view_as_complex(mixture.contiguous())
+
+        mask = mask.view(B, n, -1, Fr, T)
+        mask = mask.reshape(-1, 2, Fr, T).permute(0, 2, 3, 1)
+        mask = torch.view_as_complex(mask.contiguous())
+
+        x = mixture * mask
+
+        x = torch.istft(x, **stft_opts)
         x = x.reshape(B, len(self.sources), self.audio_channels, -1)
 
         x = x[:, :, :, :-padding]

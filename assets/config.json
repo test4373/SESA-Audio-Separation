@@ -2,5 +2,10 @@
   "lang": {
     "override": true,
     "selected_lang": "en_us"
+  },
+  "sharing": {
+    "method": "gradio",
+    "ngrok_token": "",
+    "port": 8142
   }
 }
