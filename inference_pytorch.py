@@ -303,7 +303,7 @@ def proc_folder_pytorch_optimized(args):
     if args.start_check_point != '':
         # Load checkpoint
         print(f'Loading checkpoint: {args.start_check_point}')
-        checkpoint = torch.load(args.start_check_point, map_location=device)
+        checkpoint = torch.load(args.start_check_point, map_location=device, weights_only=False)
         
         # Handle different checkpoint formats
         if isinstance(checkpoint, dict):

@@ -53,8 +53,16 @@ def download_callback(url, download_type='direct', cookie_file=None):
     # Mount Google Drive (optional)
     if drive is not None:
         try:
-            drive.mount('/content/drive', force_remount=True)
-            drive_mounted = True
+            # Check if already mounted first
+            if os.path.exists('/content/drive/MyDrive'):
+                drive_mounted = True
+            else:
+                drive.mount('/content/drive', force_remount=True)
+                drive_mounted = True
+        except AttributeError as ae:
+            # Handle 'NoneType' object has no attribute 'kernel' error
+            print(f"⚠️ Google Drive mount skipped (Colab kernel issue): {str(ae)}")
+            print(i18n("continuing_without_google_drive"))
         except Exception as e:
             print(i18n("google_drive_mount_error").format(str(e)))
             print(i18n("continuing_without_google_drive"))

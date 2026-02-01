@@ -19,7 +19,7 @@ def load_checkpoint(checkpoint_path: str, model, device: str):
     """Load model from checkpoint."""
     print(f"Loading checkpoint from: {checkpoint_path}")
     
-    checkpoint = torch.load(checkpoint_path, map_location=device)
+    checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
     
     # Handle different checkpoint formats
     if isinstance(checkpoint, dict):

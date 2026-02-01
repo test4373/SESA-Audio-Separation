@@ -50,9 +50,11 @@ import tempfile
 from urllib.parse import urlparse, quote
 try:
     from google.colab import drive
+    # Verify we're actually in a working Colab environment
     IS_COLAB = True
 except ImportError:
     IS_COLAB = False
+    drive = None
 import matchering as mg
 
 import warnings
@@ -76,14 +78,24 @@ def setup_directories():
     """Create necessary directories and check Google Drive access."""
     if IS_COLAB:
         try:
-            if not os.path.exists('/content/drive/MyDrive'):
+            # Check if Google Drive is already mounted
+            if os.path.exists('/content/drive/MyDrive'):
+                pass  # Already mounted, no action needed
+            else:
                 print("Mounting Google Drive...")
-                from google.colab import drive
-                drive.mount('/content/drive', force_remount=True)
-            if not os.path.exists('/content/drive/MyDrive'):
-                raise RuntimeError("Google Drive mount failed. Please mount manually with 'from google.colab import drive; drive.mount('/content/drive', force_remount=True)'.")
+                try:
+                    from google.colab import drive
+                    drive.mount('/content/drive', force_remount=True)
+                except AttributeError as ae:
+                    # Handle 'NoneType' object has no attribute 'kernel' error
+                    print(f"⚠️ Google Drive mount skipped (Colab kernel issue): {str(ae)}")
+                    print("Continuing with local storage...")
+                except Exception as mount_error:
+                    print(f"⚠️ Google Drive mount failed: {str(mount_error)}")
+                    print("Continuing with local storage...")
         except Exception as e:
-            raise RuntimeError(f"Failed to mount Google Drive: {str(e)}")
+            print(f"⚠️ Google Drive setup error: {str(e)}")
+            print("Continuing without Google Drive...")
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     os.makedirs(INPUT_DIR, exist_ok=True)
     os.makedirs(OLD_OUTPUT_DIR, exist_ok=True)
@@ -296,11 +308,12 @@ def run_command_and_process_files(
                     continue
                 base, ext = os.path.splitext(filename)
                 detected_type = None
-                for type_key in ['vocals', 'instrumental', 'phaseremix', 'drum', 'bass', 'other', 'effects', 'speech', 'music', 'dry', 'male', 'female', 'bleed', 'karaoke']:
+                for type_key in ['vocals', 'instrumental', 'instrument', 'phaseremix', 'drum', 'bass', 'other', 'effects', 'speech', 'music', 'dry', 'male', 'female', 'bleed', 'karaoke']:
                     if type_key in base.lower():
                         detected_type = type_key
                         break
-                type_suffix = detected_type.capitalize() if detected_type else "Processed"
+                # Normalize 'instrument' to 'Instrumental' for consistency
+                type_suffix = 'Instrumental' if detected_type == 'instrument' else (detected_type.capitalize() if detected_type else "Processed")
                 clean_base = sanitize_filename(base.split('_')[0]).rsplit('.', 1)[0]
                 new_filename = f"{clean_base}_{type_suffix}_{filename_model}{ext}"
                 new_file_path = os.path.join(folder, new_filename)
@@ -315,15 +328,18 @@ def run_command_and_process_files(
         if not output_files:
             raise FileNotFoundError("No output files in OUTPUT_DIR after renaming")
 
-        def find_file(keyword):
+        def find_file(keywords):
+            """Find file matching any of the keywords (can be single keyword or list)."""
+            if isinstance(keywords, str):
+                keywords = [keywords]
             matching_files = [
                 os.path.join(OUTPUT_DIR, f) for f in output_files 
-                if keyword in f.lower()
+                if any(kw in f.lower() for kw in keywords)
             ]
             return matching_files[0] if matching_files else None
 
         output_list = [
-            find_file('vocals'), find_file('instrumental'), find_file('phaseremix'),
+            find_file('vocals'), find_file(['instrumental', 'instrument']), find_file('phaseremix'),
             find_file('drum'), find_file('bass'), find_file('other'), find_file('effects'),
             find_file('speech'), find_file('music'), find_file('dry'), find_file('male'),
             find_file('female'), find_file('bleed'), find_file('karaoke')

@@ -243,7 +243,7 @@ class PyTorchBackend:
             if self.optimize_mode == 'jit':
                 self.compiled_model = torch.jit.load(load_path, map_location=self.device)
             else:
-                model_template.load_state_dict(torch.load(load_path, map_location=self.device))
+                model_template.load_state_dict(torch.load(load_path, map_location=self.device, weights_only=False))
                 self.compiled_model = model_template.eval()
             
             print(f"✓ Model loaded from: {load_path}")
@@ -278,13 +278,32 @@ class PyTorchBackend:
                 print(f"Warning: Tensor has rank {x.dim()}, skipping channels_last format.")
         
         # Run inference with AMP if enabled
-        if self.use_amp and self.device.startswith('cuda'):
-            with torch.cuda.amp.autocast():
+        try:
+            if self.use_amp and self.device.startswith('cuda'):
+                with torch.cuda.amp.autocast():
+                    with torch.no_grad():
+                        return self.compiled_model(x)
+            else:
                 with torch.no_grad():
                     return self.compiled_model(x)
-        else:
-            with torch.no_grad():
-                return self.compiled_model(x)
+        except Exception as e:
+            # Fallback to non-compiled model if torch.compile fails at runtime
+            # This can happen with rotary embeddings that mutate class variables
+            if self.optimize_mode == 'compile' and self.model is not None:
+                print(f"  ⚠️ torch.compile runtime error: {type(e).__name__}")
+                print(f"  🔄 Falling back to non-compiled model...")
+                self.compiled_model = self.model
+                self.optimize_mode = 'fallback'
+                # Retry with non-compiled model
+                if self.use_amp and self.device.startswith('cuda'):
+                    with torch.cuda.amp.autocast():
+                        with torch.no_grad():
+                            return self.compiled_model(x)
+                else:
+                    with torch.no_grad():
+                        return self.compiled_model(x)
+            else:
+                raise
 
 
 class PyTorchOptimizer:

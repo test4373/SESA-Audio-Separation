@@ -1,11 +1,155 @@
 import os
 import yaml
+import json
+import re
 from urllib.parse import quote
 from pathlib import Path
 
 # Temel dizin ve checkpoint dizini sabit olarak tanımlanıyor
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 CHECKPOINT_DIR = os.path.join(BASE_DIR, 'ckpts')
+CUSTOM_MODELS_FILE = os.path.join(BASE_DIR, 'assets', 'custom_models.json')
+
+# Supported model types for auto-detection and manual selection
+SUPPORTED_MODEL_TYPES = [
+    'bs_roformer',
+    'bs_roformer_custom',
+    'mel_band_roformer',
+    'mdx23c',
+    'bandit_v2',
+    'scnet',
+    'htdemucs',
+    'torchseg'
+]
+
+def detect_model_type_from_url(checkpoint_url, config_url=None):
+    """Auto-detect model type from URL patterns."""
+    urls_to_check = [checkpoint_url]
+    if config_url:
+        urls_to_check.append(config_url)
+    
+    combined_text = ' '.join(urls_to_check).lower()
+    
+    patterns = [
+        (r'bs[-_]?roformer[-_]?custom|hyperace', 'bs_roformer_custom'),
+        (r'bs[-_]?roformer|bsroformer', 'bs_roformer'),
+        (r'mel[-_]?band[-_]?roformer|melbandroformer|mbr', 'mel_band_roformer'),
+        (r'mdx23c', 'mdx23c'),
+        (r'bandit[-_]?v?2?', 'bandit_v2'),
+        (r'scnet', 'scnet'),
+        (r'htdemucs|demucs', 'htdemucs'),
+        (r'torchseg', 'torchseg'),
+    ]
+    
+    for pattern, model_type in patterns:
+        if re.search(pattern, combined_text):
+            return model_type
+    return None
+
+def detect_model_type_from_config(config_url):
+    """Try to detect model type by downloading and parsing config YAML."""
+    try:
+        import requests
+        response = requests.get(config_url, timeout=10)
+        if response.status_code == 200:
+            config_data = yaml.safe_load(response.text)
+            if 'model_type' in config_data:
+                return config_data['model_type']
+            if 'model' in config_data and 'model_type' in config_data['model']:
+                return config_data['model']['model_type']
+    except Exception as e:
+        print(f"Could not detect model type from config: {e}")
+    return None
+
+def load_custom_models():
+    """Load custom models from JSON file."""
+    if not os.path.exists(CUSTOM_MODELS_FILE):
+        return {}
+    try:
+        with open(CUSTOM_MODELS_FILE, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except (json.JSONDecodeError, IOError) as e:
+        print(f"Error loading custom models: {e}")
+        return {}
+
+def save_custom_models(models):
+    """Save custom models to JSON file."""
+    os.makedirs(os.path.dirname(CUSTOM_MODELS_FILE), exist_ok=True)
+    with open(CUSTOM_MODELS_FILE, 'w', encoding='utf-8') as f:
+        json.dump(models, f, indent=2, ensure_ascii=False)
+
+def add_custom_model(model_name, model_type, checkpoint_url, config_url, custom_model_url=None, auto_detect=True):
+    """Add a new custom model."""
+    if not model_name or not model_name.strip():
+        return False, "Model name is required"
+    if not checkpoint_url or not checkpoint_url.strip():
+        return False, "Checkpoint URL is required"
+    if not config_url or not config_url.strip():
+        return False, "Config URL is required"
+    
+    model_name = model_name.strip()
+    checkpoint_url = checkpoint_url.strip()
+    config_url = config_url.strip()
+    custom_model_url = custom_model_url.strip() if custom_model_url else None
+    
+    if auto_detect and (not model_type or model_type == "auto"):
+        detected_type = detect_model_type_from_url(checkpoint_url, config_url)
+        if not detected_type:
+            detected_type = detect_model_type_from_config(config_url)
+        if detected_type:
+            model_type = detected_type
+            print(f"Auto-detected model type: {model_type}")
+        else:
+            return False, "Could not auto-detect model type. Please select manually."
+    
+    if model_type not in SUPPORTED_MODEL_TYPES:
+        return False, f"Unsupported model type: {model_type}"
+    
+    checkpoint_filename = os.path.basename(checkpoint_url.split('?')[0])
+    config_filename = f"config_{model_name.replace(' ', '_').lower()}.yaml"
+    
+    models = load_custom_models()
+    if model_name in models:
+        return False, f"Model '{model_name}' already exists"
+    
+    models[model_name] = {
+        'model_type': model_type,
+        'checkpoint_url': checkpoint_url,
+        'config_url': config_url,
+        'custom_model_url': custom_model_url,
+        'checkpoint_filename': checkpoint_filename,
+        'config_filename': config_filename,
+        'needs_conf_edit': True
+    }
+    save_custom_models(models)
+    return True, f"Model '{model_name}' added successfully"
+
+def delete_custom_model(model_name):
+    """Delete a custom model."""
+    models = load_custom_models()
+    if model_name not in models:
+        return False, f"Model '{model_name}' not found"
+    
+    model_config = models[model_name]
+    checkpoint_path = os.path.join(CHECKPOINT_DIR, model_config.get('checkpoint_filename', ''))
+    config_path = os.path.join(CHECKPOINT_DIR, model_config.get('config_filename', ''))
+    
+    try:
+        if os.path.exists(checkpoint_path):
+            os.remove(checkpoint_path)
+        if os.path.exists(config_path):
+            os.remove(config_path)
+    except Exception as e:
+        print(f"Warning: Could not delete model files: {e}")
+    
+    del models[model_name]
+    save_custom_models(models)
+    return True, f"Model '{model_name}' deleted successfully"
+
+def get_custom_models_list():
+    """Get list of custom model names with their types."""
+    models = load_custom_models()
+    return [(name, config.get('model_type', 'unknown')) for name, config in models.items()]
 
 def conf_edit(config_path, chunk_size, overlap):
     """Edits the configuration file with chunk size and overlap."""
@@ -28,14 +172,21 @@ def conf_edit(config_path, chunk_size, overlap):
     with open(full_config_path, 'w') as f:
         yaml.dump(data, f, default_flow_style=False, sort_keys=False, Dumper=yaml.Dumper)
 
-def download_file(url, path=None):
-    """Downloads a file from a URL."""
+def download_file(url, path=None, target_filename=None):
+    """Downloads a file from a URL.
+    
+    Args:
+        url: The URL to download from.
+        path: The directory to save the file to. Defaults to CHECKPOINT_DIR.
+        target_filename: Optional custom filename to save as. If None, uses filename from URL.
+    """
     import requests
     encoded_url = quote(url, safe=':/')
     if path is None:
         path = CHECKPOINT_DIR
     os.makedirs(path, exist_ok=True)
-    filename = os.path.basename(encoded_url)
+    # Use custom target filename if provided, otherwise extract from URL
+    filename = target_filename if target_filename else os.path.basename(encoded_url)
     file_path = os.path.join(path, filename)
     if os.path.exists(file_path):
         print(f"File '{filename}' already exists at '{path}'.")
@@ -55,6 +206,69 @@ def download_file(url, path=None):
 # Model konfigurasyonlarını kategorize bir sözlükte tut
 MODEL_CONFIGS = {
     "Vocal Models": {
+        # === NEW MODELS (en üstte) ===
+        'bs_roformer_voc_hyperacev2 (by unwa)': {
+            'model_type': 'bs_roformer_custom',
+            'config_path': os.path.join(CHECKPOINT_DIR, 'config_hyperacev2_voc.yaml'),
+            'start_check_point': os.path.join(CHECKPOINT_DIR, 'bs_roformer_voc_hyperacev2.ckpt'),
+            'download_urls': [
+                ('https://huggingface.co/pcunwa/BS-Roformer-HyperACE/resolve/main/v2_voc/config.yaml', 'config_hyperacev2_voc.yaml'),
+                'https://huggingface.co/pcunwa/BS-Roformer-HyperACE/resolve/main/v2_voc/bs_roformer_voc_hyperacev2.ckpt'
+            ],
+            'custom_model_url': 'https://huggingface.co/pcunwa/BS-Roformer-HyperACE/resolve/main/v2_voc/bs_roformer.py',
+            'needs_conf_edit': True
+        },
+        'BS-Roformer-Resurrection (by unwa)': {
+            'model_type': 'bs_roformer',
+            'config_path': os.path.join(CHECKPOINT_DIR, 'BS-Roformer-Resurrection-Config.yaml'),
+            'start_check_point': os.path.join(CHECKPOINT_DIR, 'BS-Roformer-Resurrection.ckpt'),
+            'download_urls': [
+                'https://huggingface.co/pcunwa/BS-Roformer-Resurrection/resolve/main/BS-Roformer-Resurrection-Config.yaml',
+                'https://huggingface.co/pcunwa/BS-Roformer-Resurrection/resolve/main/BS-Roformer-Resurrection.ckpt'
+            ],
+            'needs_conf_edit': True
+        },
+        'bs_roformer_revive3e (by unwa)': {
+            'model_type': 'bs_roformer',
+            'config_path': os.path.join(CHECKPOINT_DIR, 'config_revive.yaml'),
+            'start_check_point': os.path.join(CHECKPOINT_DIR, 'bs_roformer_revive3e.ckpt'),
+            'download_urls': [
+                ('https://huggingface.co/pcunwa/BS-Roformer-Revive/resolve/main/config.yaml', 'config_revive.yaml'),
+                'https://huggingface.co/pcunwa/BS-Roformer-Revive/resolve/main/bs_roformer_revive3e.ckpt'
+            ],
+            'needs_conf_edit': True
+        },
+        'bs_roformer_revive2 (by unwa)': {
+            'model_type': 'bs_roformer',
+            'config_path': os.path.join(CHECKPOINT_DIR, 'config_revive.yaml'),
+            'start_check_point': os.path.join(CHECKPOINT_DIR, 'bs_roformer_revive2.ckpt'),
+            'download_urls': [
+                ('https://huggingface.co/pcunwa/BS-Roformer-Revive/resolve/main/config.yaml', 'config_revive.yaml'),
+                'https://huggingface.co/pcunwa/BS-Roformer-Revive/resolve/main/bs_roformer_revive2.ckpt'
+            ],
+            'needs_conf_edit': True
+        },
+        'bs_roformer_revive (by unwa)': {
+            'model_type': 'bs_roformer',
+            'config_path': os.path.join(CHECKPOINT_DIR, 'config_revive.yaml'),
+            'start_check_point': os.path.join(CHECKPOINT_DIR, 'bs_roformer_revive.ckpt'),
+            'download_urls': [
+                ('https://huggingface.co/pcunwa/BS-Roformer-Revive/resolve/main/config.yaml', 'config_revive.yaml'),
+                'https://huggingface.co/pcunwa/BS-Roformer-Revive/resolve/main/bs_roformer_revive.ckpt'
+            ],
+            'needs_conf_edit': True
+        },
+        'karaoke_bs_roformer_anvuew (by anvuew)': {
+            'model_type': 'bs_roformer',
+            'config_path': os.path.join(CHECKPOINT_DIR, 'karaoke_bs_roformer_anvuew.yaml'),
+            'start_check_point': os.path.join(CHECKPOINT_DIR, 'karaoke_bs_roformer_anvuew.ckpt'),
+            'download_urls': [
+                'https://huggingface.co/anvuew/karaoke_bs_roformer/resolve/main/karaoke_bs_roformer_anvuew.yaml',
+                'https://huggingface.co/anvuew/karaoke_bs_roformer/resolve/main/karaoke_bs_roformer_anvuew.ckpt'
+            ],
+            'needs_conf_edit': True
+        },
+        # === EXISTING MODELS ===
         'VOCALS-big_beta6X (by Unwa)': {
             'model_type': 'mel_band_roformer',
             'config_path': os.path.join(CHECKPOINT_DIR, 'big_beta6x.yaml'),
@@ -407,6 +621,71 @@ MODEL_CONFIGS = {
         }
     },
     "Instrumental Models": {
+        # === NEW MODELS (en üstte) ===
+        'Neo_InstVFX (by natanworkspace)': {
+            'model_type': 'mel_band_roformer',
+            'config_path': os.path.join(CHECKPOINT_DIR, 'config_neo_inst.yaml'),
+            'start_check_point': os.path.join(CHECKPOINT_DIR, 'Neo_InstVFX.ckpt'),
+            'download_urls': [
+                'https://huggingface.co/natanworkspace/melband_roformer/resolve/main/config_neo_inst.yaml',
+                'https://huggingface.co/natanworkspace/melband_roformer/resolve/main/Neo_InstVFX.ckpt'
+            ],
+            'needs_conf_edit': True
+        },
+        'BS-Roformer-Resurrection-Inst (by unwa)': {
+            'model_type': 'bs_roformer',
+            'config_path': os.path.join(CHECKPOINT_DIR, 'BS-Roformer-Resurrection-Inst-Config.yaml'),
+            'start_check_point': os.path.join(CHECKPOINT_DIR, 'BS-Roformer-Resurrection-Inst.ckpt'),
+            'download_urls': [
+                'https://huggingface.co/pcunwa/BS-Roformer-Resurrection/resolve/main/BS-Roformer-Resurrection-Inst-Config.yaml',
+                'https://huggingface.co/pcunwa/BS-Roformer-Resurrection/resolve/main/BS-Roformer-Resurrection-Inst.ckpt'
+            ],
+            'needs_conf_edit': True
+        },
+        'bs_roformer_inst_hyperacev2 (by unwa)': {
+            'model_type': 'bs_roformer_custom',
+            'config_path': os.path.join(CHECKPOINT_DIR, 'config_hyperacev2_inst.yaml'),
+            'start_check_point': os.path.join(CHECKPOINT_DIR, 'bs_roformer_inst_hyperacev2.ckpt'),
+            'download_urls': [
+                ('https://huggingface.co/pcunwa/BS-Roformer-HyperACE/resolve/main/v2_inst/config.yaml', 'config_hyperacev2_inst.yaml'),
+                'https://huggingface.co/pcunwa/BS-Roformer-HyperACE/resolve/main/v2_inst/bs_roformer_inst_hyperacev2.ckpt'
+            ],
+            'custom_model_url': 'https://huggingface.co/pcunwa/BS-Roformer-HyperACE/resolve/main/v2_inst/bs_roformer.py',
+            'needs_conf_edit': True
+        },
+        'BS-Roformer-Large-Inst (by unwa)': {
+            'model_type': 'bs_roformer_custom',
+            'config_path': os.path.join(CHECKPOINT_DIR, 'config_bs_large_inst.yaml'),
+            'start_check_point': os.path.join(CHECKPOINT_DIR, 'bs_large_v2_inst.ckpt'),
+            'download_urls': [
+                ('https://huggingface.co/pcunwa/BS-Roformer-Large-Inst/resolve/main/config.yaml', 'config_bs_large_inst.yaml'),
+                'https://huggingface.co/pcunwa/BS-Roformer-Large-Inst/resolve/main/bs_large_v2_inst.ckpt'
+            ],
+            'custom_model_url': 'https://huggingface.co/pcunwa/BS-Roformer-Large-Inst/resolve/main/bs_roformer.py',
+            'needs_conf_edit': True
+        },
+        'bs_roformer_fno (by unwa)': {
+            'model_type': 'bs_roformer_custom',
+            'config_path': os.path.join(CHECKPOINT_DIR, 'bsrofo_fno.yaml'),
+            'start_check_point': os.path.join(CHECKPOINT_DIR, 'bs_roformer_fno.ckpt'),
+            'download_urls': [
+                'https://huggingface.co/pcunwa/BS-Roformer-Inst-FNO/resolve/main/bsrofo_fno.yaml',
+                'https://huggingface.co/pcunwa/BS-Roformer-Inst-FNO/resolve/main/bs_roformer_fno.ckpt'
+            ],
+            'custom_model_url': 'https://huggingface.co/listra92/MyModels/resolve/main/misc/bs_roformer.py',
+            'needs_conf_edit': True
+        },
+        'Rifforge_final_sdr_14.24 (by meskvlla33)': {
+            'model_type': 'mel_band_roformer',
+            'config_path': os.path.join(CHECKPOINT_DIR, 'config_rifforge_full_mesk.yaml'),
+            'start_check_point': os.path.join(CHECKPOINT_DIR, 'rifforge_full_sdr_14.2436.ckpt'),
+            'download_urls': [
+                'https://huggingface.co/meskvlla33/rifforge/resolve/main/config_rifforge_full_mesk.yaml',
+                'https://huggingface.co/meskvlla33/rifforge/resolve/main/rifforge_full_sdr_14.2436.ckpt'
+            ],
+            'needs_conf_edit': True
+        },
+        # === EXISTING MODELS ===
         'Inst_GaboxFv8 (by Gabox)': {
             'model_type': 'mel_band_roformer',
             'config_path': os.path.join(CHECKPOINT_DIR, 'inst_gabox.yaml'),
@@ -965,16 +1244,6 @@ MODEL_CONFIGS = {
             ],
             'needs_conf_edit': True
         },
-        'karaoke_bs_roformer_anvuew': {
-            'model_type': 'bs_roformer',
-            'config_path': os.path.join(CHECKPOINT_DIR, 'karaoke_bs_roformer_anvuew.yaml'),
-            'start_check_point': os.path.join(CHECKPOINT_DIR, 'karaoke_bs_roformer_anvuew.ckpt'),
-            'download_urls': [
-                'https://huggingface.co/anvuew/karaoke_bs_roformer/resolve/main/karaoke_bs_roformer_anvuew.yaml',
-                'https://huggingface.co/anvuew/karaoke_bs_roformer/resolve/main/karaoke_bs_roformer_anvuew.ckpt'
-            ],
-            'needs_conf_edit': True
-        },
         'mel_band_roformer_karaoke_becruily': {
             'model_type': 'mel_band_roformer',
             'config_path': os.path.join(CHECKPOINT_DIR, 'config_karaoke_becruily.yaml'),
@@ -1067,139 +1336,15 @@ MODEL_CONFIGS = {
             ],
             'needs_conf_edit': True
         },
-        'bs_roformer_fno (by unwa)': {
-            'model_type': 'bs_roformer_custom',
-            'config_path': os.path.join(CHECKPOINT_DIR, 'bsrofo_fno.yaml'),
-            'start_check_point': os.path.join(CHECKPOINT_DIR, 'bs_roformer_fno.ckpt'),
-            'download_urls': [
-                'https://huggingface.co/pcunwa/BS-Roformer-Inst-FNO/resolve/main/bsrofo_fno.yaml',
-                'https://huggingface.co/pcunwa/BS-Roformer-Inst-FNO/resolve/main/bs_roformer_fno.ckpt'
-            ],
-            'custom_model_url': 'https://huggingface.co/listra92/MyModels/resolve/main/misc/bs_roformer.py',
-            'needs_conf_edit': True
-        },
         'bs_hyperace (by unwa)': {
             'model_type': 'bs_roformer_custom',
             'config_path': os.path.join(CHECKPOINT_DIR, 'config_hyperace.yaml'),
             'start_check_point': os.path.join(CHECKPOINT_DIR, 'bs_hyperace.ckpt'),
             'download_urls': [
-                'https://huggingface.co/pcunwa/BS-Roformer-HyperACE/resolve/main/config.yaml',
+                ('https://huggingface.co/pcunwa/BS-Roformer-HyperACE/resolve/main/config.yaml', 'config_hyperace.yaml'),
                 'https://huggingface.co/pcunwa/BS-Roformer-HyperACE/resolve/main/bs_hyperace.ckpt'
             ],
             'custom_model_url': 'https://huggingface.co/pcunwa/BS-Roformer-HyperACE/resolve/main/bs_roformer.py',
-            'needs_conf_edit': True
-        },
-        'bs_roformer_inst_hyperacev2 (by unwa)': {
-            'model_type': 'bs_roformer_custom',
-            'config_path': os.path.join(CHECKPOINT_DIR, 'config_hyperacev2_inst.yaml'),
-            'start_check_point': os.path.join(CHECKPOINT_DIR, 'bs_roformer_inst_hyperacev2.ckpt'),
-            'download_urls': [
-                'https://huggingface.co/pcunwa/BS-Roformer-HyperACE/resolve/main/v2_inst/config.yaml',
-                'https://huggingface.co/pcunwa/BS-Roformer-HyperACE/resolve/main/v2_inst/bs_roformer_inst_hyperacev2.ckpt'
-            ],
-            'custom_model_url': 'https://huggingface.co/pcunwa/BS-Roformer-HyperACE/resolve/main/v2_inst/bs_roformer.py',
-            'needs_conf_edit': True
-        },
-        'bs_roformer_voc_hyperacev2 (by unwa)': {
-            'model_type': 'bs_roformer_custom',
-            'config_path': os.path.join(CHECKPOINT_DIR, 'config_hyperacev2_voc.yaml'),
-            'start_check_point': os.path.join(CHECKPOINT_DIR, 'bs_roformer_voc_hyperacev2.ckpt'),
-            'download_urls': [
-                'https://huggingface.co/pcunwa/BS-Roformer-HyperACE/resolve/main/v2_voc/config.yaml',
-                'https://huggingface.co/pcunwa/BS-Roformer-HyperACE/resolve/main/v2_voc/bs_roformer_voc_hyperacev2.ckpt'
-            ],
-            'custom_model_url': 'https://huggingface.co/pcunwa/BS-Roformer-HyperACE/resolve/main/v2_voc/bs_roformer.py',
-            'needs_conf_edit': True
-        },
-        'BS-Roformer-Large-Inst (by unwa)': {
-            'model_type': 'bs_roformer_custom',
-            'config_path': os.path.join(CHECKPOINT_DIR, 'config_bs_large_inst.yaml'),
-            'start_check_point': os.path.join(CHECKPOINT_DIR, 'bs_large_v2_inst.ckpt'),
-            'download_urls': [
-                'https://huggingface.co/pcunwa/BS-Roformer-Large-Inst/resolve/main/config.yaml',
-                'https://huggingface.co/pcunwa/BS-Roformer-Large-Inst/resolve/main/bs_large_v2_inst.ckpt'
-            ],
-            'custom_model_url': 'https://huggingface.co/pcunwa/BS-Roformer-Large-Inst/resolve/main/bs_roformer.py',
-            'needs_conf_edit': True
-        },
-        'Rifforge_final_sdr_14.24 (by meskvlla33)': {
-            'model_type': 'mel_band_roformer',
-            'config_path': os.path.join(CHECKPOINT_DIR, 'config_rifforge_full_mesk.yaml'),
-            'start_check_point': os.path.join(CHECKPOINT_DIR, 'rifforge_full_sdr_14.2436.ckpt'),
-            'download_urls': [
-                'https://huggingface.co/meskvlla33/rifforge/resolve/main/config_rifforge_full_mesk.yaml',
-                'https://huggingface.co/meskvlla33/rifforge/resolve/main/rifforge_full_sdr_14.2436.ckpt'
-            ],
-            'needs_conf_edit': True
-        },
-        'bs_roformer_revive (by unwa)': {
-            'model_type': 'bs_roformer',
-            'config_path': os.path.join(CHECKPOINT_DIR, 'config_revive.yaml'),
-            'start_check_point': os.path.join(CHECKPOINT_DIR, 'bs_roformer_revive.ckpt'),
-            'download_urls': [
-                'https://huggingface.co/pcunwa/BS-Roformer-Revive/resolve/main/config.yaml',
-                'https://huggingface.co/pcunwa/BS-Roformer-Revive/resolve/main/bs_roformer_revive.ckpt'
-            ],
-            'needs_conf_edit': True
-        },
-        'bs_roformer_revive2 (by unwa)': {
-            'model_type': 'bs_roformer',
-            'config_path': os.path.join(CHECKPOINT_DIR, 'config_revive.yaml'),
-            'start_check_point': os.path.join(CHECKPOINT_DIR, 'bs_roformer_revive2.ckpt'),
-            'download_urls': [
-                'https://huggingface.co/pcunwa/BS-Roformer-Revive/resolve/main/config.yaml',
-                'https://huggingface.co/pcunwa/BS-Roformer-Revive/resolve/main/bs_roformer_revive2.ckpt'
-            ],
-            'needs_conf_edit': True
-        },
-        'bs_roformer_revive3e (by unwa)': {
-            'model_type': 'bs_roformer',
-            'config_path': os.path.join(CHECKPOINT_DIR, 'config_revive.yaml'),
-            'start_check_point': os.path.join(CHECKPOINT_DIR, 'bs_roformer_revive3e.ckpt'),
-            'download_urls': [
-                'https://huggingface.co/pcunwa/BS-Roformer-Revive/resolve/main/config.yaml',
-                'https://huggingface.co/pcunwa/BS-Roformer-Revive/resolve/main/bs_roformer_revive3e.ckpt'
-            ],
-            'needs_conf_edit': True
-        },
-        'BS-Roformer-Resurrection (by unwa)': {
-            'model_type': 'bs_roformer',
-            'config_path': os.path.join(CHECKPOINT_DIR, 'BS-Roformer-Resurrection-Config.yaml'),
-            'start_check_point': os.path.join(CHECKPOINT_DIR, 'BS-Roformer-Resurrection.ckpt'),
-            'download_urls': [
-                'https://huggingface.co/pcunwa/BS-Roformer-Resurrection/resolve/main/BS-Roformer-Resurrection-Config.yaml',
-                'https://huggingface.co/pcunwa/BS-Roformer-Resurrection/resolve/main/BS-Roformer-Resurrection.ckpt'
-            ],
-            'needs_conf_edit': True
-        },
-        'BS-Roformer-Resurrection-Inst (by unwa)': {
-            'model_type': 'bs_roformer',
-            'config_path': os.path.join(CHECKPOINT_DIR, 'BS-Roformer-Resurrection-Inst-Config.yaml'),
-            'start_check_point': os.path.join(CHECKPOINT_DIR, 'BS-Roformer-Resurrection-Inst.ckpt'),
-            'download_urls': [
-                'https://huggingface.co/pcunwa/BS-Roformer-Resurrection/resolve/main/BS-Roformer-Resurrection-Inst-Config.yaml',
-                'https://huggingface.co/pcunwa/BS-Roformer-Resurrection/resolve/main/BS-Roformer-Resurrection-Inst.ckpt'
-            ],
-            'needs_conf_edit': True
-        },
-        'inst_gaboxFlowersV10 (by Gabox)': {
-            'model_type': 'mel_band_roformer',
-            'config_path': os.path.join(CHECKPOINT_DIR, 'v10.yaml'),
-            'start_check_point': os.path.join(CHECKPOINT_DIR, 'inst_gaboxFlowersV10.ckpt'),
-            'download_urls': [
-                'https://huggingface.co/GaboxR67/MelBandRoformers/resolve/main/melbandroformers/instrumental/v10.yaml',
-                'https://huggingface.co/GaboxR67/MelBandRoformers/resolve/main/melbandroformers/instrumental/inst_gaboxFlowersV10.ckpt'
-            ],
-            'needs_conf_edit': True
-        },
-        'Neo_InstVFX (by natanworkspace)': {
-            'model_type': 'mel_band_roformer',
-            'config_path': os.path.join(CHECKPOINT_DIR, 'config_neo_inst.yaml'),
-            'start_check_point': os.path.join(CHECKPOINT_DIR, 'Neo_InstVFX.ckpt'),
-            'download_urls': [
-                'https://huggingface.co/natanworkspace/melband_roformer/resolve/main/config_neo_inst.yaml',
-                'https://huggingface.co/natanworkspace/melband_roformer/resolve/main/Neo_InstVFX.ckpt'
-            ],
             'needs_conf_edit': True
         },
         'becruily_deux (by becruily)': {
@@ -1219,16 +1364,6 @@ MODEL_CONFIGS = {
             'download_urls': [
                 'https://huggingface.co/becruily/mel-band-roformer-guitar/resolve/main/config_guitar_becruily.yaml',
                 'https://huggingface.co/becruily/mel-band-roformer-guitar/resolve/main/becruily_guitar.ckpt'
-            ],
-            'needs_conf_edit': True
-        },
-        'karaoke_bs_roformer_anvuew (by anvuew)': {
-            'model_type': 'bs_roformer',
-            'config_path': os.path.join(CHECKPOINT_DIR, 'karaoke_bs_roformer_anvuew.yaml'),
-            'start_check_point': os.path.join(CHECKPOINT_DIR, 'karaoke_bs_roformer_anvuew.ckpt'),
-            'download_urls': [
-                'https://huggingface.co/anvuew/karaoke_bs_roformer/resolve/main/karaoke_bs_roformer_anvuew.yaml',
-                'https://huggingface.co/anvuew/karaoke_bs_roformer/resolve/main/karaoke_bs_roformer_anvuew.ckpt'
             ],
             'needs_conf_edit': True
         },
@@ -1306,22 +1441,91 @@ MODEL_CONFIGS = {
 }
 
 def get_model_config(clean_model=None, chunk_size=None, overlap=None):
-    """Returns model type, config path, and checkpoint path for a given model name, downloading files if needed."""
-    if clean_model is None:
-        return {model_name for category in MODEL_CONFIGS.values() for model_name in category.keys()}
+    """Returns model type, config path, and checkpoint path for a given model name, downloading files if needed.
     
+    download_urls can contain:
+        - Simple strings: 'url' - downloads with filename from URL
+        - Tuples: ('url', 'target_filename') - downloads with custom filename
+    
+    Also handles custom models loaded from custom_models.json
+    """
+    if clean_model is None:
+        all_models = {model_name for category in MODEL_CONFIGS.values() for model_name in category.keys()}
+        # Add custom models
+        custom_models = load_custom_models()
+        all_models.update(custom_models.keys())
+        return all_models
+    
+    # First check built-in models
     for category in MODEL_CONFIGS.values():
         if clean_model in category:
             config = category[clean_model]
-            for url in config['download_urls']:
-                download_file(url)
+            for url_entry in config['download_urls']:
+                # Handle both simple URL strings and (url, target_filename) tuples
+                if isinstance(url_entry, tuple):
+                    url, target_filename = url_entry
+                    download_file(url, target_filename=target_filename)
+                else:
+                    download_file(url_entry)
             if config.get('custom_model_url'):
                 custom_path = os.path.join(BASE_DIR, 'models', 'bs_roformer', 'bs_roformer_custom')
                 os.makedirs(custom_path, exist_ok=True)
+                # Create __init__.py for Python import support
+                init_file = os.path.join(custom_path, '__init__.py')
+                if not os.path.exists(init_file):
+                    with open(init_file, 'w') as f:
+                        f.write('# Auto-generated for custom BSRoformer models\n')
                 download_file(config['custom_model_url'], path=custom_path)
             if config['needs_conf_edit'] and chunk_size is not None and overlap is not None:
                 conf_edit(config['config_path'], chunk_size, overlap)
             return config['model_type'], config['config_path'], config['start_check_point']
+    
+    # Then check custom models
+    custom_models = load_custom_models()
+    if clean_model in custom_models:
+        config = custom_models[clean_model]
+        checkpoint_path = os.path.join(CHECKPOINT_DIR, config['checkpoint_filename'])
+        config_path = os.path.join(CHECKPOINT_DIR, config['config_filename'])
+        
+        # Download checkpoint
+        download_file(config['checkpoint_url'], target_filename=config['checkpoint_filename'])
+        # Download config with custom filename
+        download_file(config['config_url'], target_filename=config['config_filename'])
+        
+        # Handle custom model URL if present
+        if config.get('custom_model_url'):
+            custom_path = os.path.join(BASE_DIR, 'models', 'bs_roformer', 'bs_roformer_custom')
+            os.makedirs(custom_path, exist_ok=True)
+            init_file = os.path.join(custom_path, '__init__.py')
+            if not os.path.exists(init_file):
+                with open(init_file, 'w') as f:
+                    f.write('# Auto-generated for custom BSRoformer models\n')
+            download_file(config['custom_model_url'], path=custom_path)
+        
+        # Apply config edits if needed
+        if config.get('needs_conf_edit', True) and chunk_size is not None and overlap is not None:
+            conf_edit(config_path, chunk_size, overlap)
+        
+        return config['model_type'], config_path, checkpoint_path
+    
     return "", "", ""
 
-get_model_config.keys = lambda: {model_name for category in MODEL_CONFIGS.values() for model_name in category.keys()}
+def get_all_model_configs_with_custom():
+    """Returns MODEL_CONFIGS with Custom Models category added dynamically."""
+    all_configs = dict(MODEL_CONFIGS)
+    custom_models = load_custom_models()
+    if custom_models:
+        all_configs["Custom Models"] = {
+            name: {
+                'model_type': cfg['model_type'],
+                'config_path': os.path.join(CHECKPOINT_DIR, cfg['config_filename']),
+                'start_check_point': os.path.join(CHECKPOINT_DIR, cfg['checkpoint_filename']),
+                'download_urls': [cfg['checkpoint_url'], cfg['config_url']],
+                'custom_model_url': cfg.get('custom_model_url'),
+                'needs_conf_edit': cfg.get('needs_conf_edit', True)
+            }
+            for name, cfg in custom_models.items()
+        }
+    return all_configs
+
+get_model_config.keys = lambda: {model_name for category in MODEL_CONFIGS.values() for model_name in category.keys()}.union(load_custom_models().keys())

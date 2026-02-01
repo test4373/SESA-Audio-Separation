@@ -8,9 +8,9 @@ import json
 import sys
 import time
 import random
-from helpers import update_model_dropdown, handle_file_upload, clear_old_output, save_uploaded_file, update_file_list, clean_model
+from helpers import update_model_dropdown, handle_file_upload, clear_old_output, save_uploaded_file, update_file_list, clean_model, get_model_categories
 from download import download_callback
-from model import get_model_config, MODEL_CONFIGS
+from model import get_model_config, MODEL_CONFIGS, get_all_model_configs_with_custom, add_custom_model, delete_custom_model, get_custom_models_list, SUPPORTED_MODEL_TYPES, load_custom_models
 from processing import process_audio, auto_ensemble_process, ensemble_audio_fn, refresh_auto_output
 from assets.i18n.i18n import I18nAuto
 from config_manager import load_config, save_config, update_favorites, save_preset, delete_preset
@@ -235,7 +235,7 @@ def create_interface():
                             with gr.Row():
                                 model_category = gr.Dropdown(
                                     label=i18n("category"),
-                                    choices=[i18n(cat) for cat in MODEL_CONFIGS.keys()],
+                                    choices=[i18n(cat) for cat in get_all_model_configs_with_custom().keys()],
                                     value=i18n(initial_settings["model_category"])
                                 )
                                 favorite_button = gr.Button(i18n("add_favorite"), variant="secondary", scale=0)
@@ -460,33 +460,33 @@ def create_interface():
                         with gr.Tabs():
                             with gr.Tab(i18n("main_tab")) as main_tab:
                                 with gr.Column():
-                                    original_audio = gr.Audio(label=i18n("original"), interactive=False)
+                                    original_audio = gr.Audio(label=i18n("original"), interactive=False, streaming=True)
                                     with gr.Row():
-                                        vocals_audio = gr.Audio(label=i18n("vocals"), show_download_button=True)
-                                        instrumental_audio = gr.Audio(label=i18n("instrumental_output"), show_download_button=True)
-                                        other_audio = gr.Audio(label=i18n("other"), show_download_button=True)
+                                        vocals_audio = gr.Audio(label=i18n("vocals"), streaming=True)
+                                        instrumental_audio = gr.Audio(label=i18n("instrumental_output"), streaming=True)
+                                        other_audio = gr.Audio(label=i18n("other"), streaming=True)
 
                             with gr.Tab(i18n("details_tab")) as details_tab:
                                 with gr.Column():
                                     with gr.Row():
-                                        male_audio = gr.Audio(label=i18n("male"))
-                                        female_audio = gr.Audio(label=i18n("female"))
-                                        speech_audio = gr.Audio(label=i18n("speech"))
+                                        male_audio = gr.Audio(label=i18n("male"), streaming=True)
+                                        female_audio = gr.Audio(label=i18n("female"), streaming=True)
+                                        speech_audio = gr.Audio(label=i18n("speech"), streaming=True)
                                     with gr.Row():
-                                        drum_audio = gr.Audio(label=i18n("drums"))
-                                        bass_audio = gr.Audio(label=i18n("bass"))
+                                        drum_audio = gr.Audio(label=i18n("drums"), streaming=True)
+                                        bass_audio = gr.Audio(label=i18n("bass"), streaming=True)
                                     with gr.Row():
-                                        effects_audio = gr.Audio(label=i18n("effects"))
+                                        effects_audio = gr.Audio(label=i18n("effects"), streaming=True)
 
                             with gr.Tab(i18n("advanced_tab")) as advanced_tab:
                                 with gr.Column():
                                     with gr.Row():
-                                        phaseremix_audio = gr.Audio(label=i18n("phase_remix"))
-                                        dry_audio = gr.Audio(label=i18n("dry"))
+                                        phaseremix_audio = gr.Audio(label=i18n("phase_remix"), streaming=True)
+                                        dry_audio = gr.Audio(label=i18n("dry"), streaming=True)
                                     with gr.Row():
-                                        music_audio = gr.Audio(label=i18n("music"))
-                                        karaoke_audio = gr.Audio(label=i18n("karaoke"))
-                                        bleed_audio = gr.Audio(label=i18n("bleed"))
+                                        music_audio = gr.Audio(label=i18n("music"), streaming=True)
+                                        karaoke_audio = gr.Audio(label=i18n("karaoke"), streaming=True)
+                                        bleed_audio = gr.Audio(label=i18n("bleed"), streaming=True)
 
                         separation_progress_html = gr.HTML(
                             value=f"""
@@ -621,7 +621,7 @@ def create_interface():
                             with gr.Row():
                                 auto_category_dropdown = gr.Dropdown(
                                     label=i18n("model_category"),
-                                    choices=[i18n(cat) for cat in MODEL_CONFIGS.keys()],
+                                    choices=[i18n(cat) for cat in get_all_model_configs_with_custom().keys()],
                                     value=i18n("Vocal Models")
                                 )
                                 selected_models = gr.Dropdown(
@@ -762,13 +762,14 @@ def create_interface():
                                     label=i18n("original_audio"),
                                     interactive=False,
                                     every=1,
-                                    elem_id="original_audio_player"
+                                    elem_id="original_audio_player",
+                                    streaming=True
                                 )
                             with gr.Tab(i18n("ensemble_result_tab")) as ensemble_result_tab:
                                 auto_output_audio = gr.Audio(
                                     label=i18n("output_preview"),
-                                    show_download_button=True,
-                                    interactive=False
+                                    interactive=False,
+                                    streaming=True
                                 )
                                 refresh_output_btn = gr.Button(i18n("refresh_output"), variant="secondary")
 
@@ -843,8 +844,8 @@ def create_interface():
                                 ensemble_output_audio = gr.Audio(
                                     label=i18n("ensembled_output"),
                                     interactive=False,
-                                    show_download_button=True,
-                                    elem_id="output-audio"
+                                    elem_id="output-audio",
+                                    streaming=True
                                 )
                             with gr.Tab(i18n("processing_log_tab")) as processing_log_tab:
                                 with gr.Accordion(i18n("processing_details"), open=True, elem_id="log-accordion"):
@@ -934,7 +935,7 @@ def create_interface():
                         pf_output_audio = gr.Audio(
                             label=i18n("phase_fixed_output"),
                             interactive=False,
-                            show_download_button=True
+                            streaming=True
                         )
                         pf_status = gr.Textbox(
                             label=i18n("status"),
@@ -996,7 +997,7 @@ def create_interface():
                         with gr.Group():
                             batch_model_category = gr.Dropdown(
                                 label=i18n("model_category"),
-                                choices=[i18n(cat) for cat in MODEL_CONFIGS.keys()],
+                                choices=[i18n(cat) for cat in get_all_model_configs_with_custom().keys()],
                                 value=i18n("Vocal Models")
                             )
                             batch_model_dropdown = gr.Dropdown(
@@ -1131,7 +1132,7 @@ def create_interface():
                 )
                 
                 batch_model_category.change(
-                    fn=lambda cat: gr.update(choices=update_model_dropdown(next((k for k in MODEL_CONFIGS.keys() if i18n(k) == cat), list(MODEL_CONFIGS.keys())[0]), favorites=load_config()["favorites"])["choices"]),
+                    fn=lambda cat: gr.update(choices=update_model_dropdown(next((k for k in get_all_model_configs_with_custom().keys() if i18n(k) == cat), list(get_all_model_configs_with_custom().keys())[0]), favorites=load_config()["favorites"])["choices"]),
                     inputs=batch_model_category,
                     outputs=batch_model_dropdown
                 )
@@ -1146,6 +1147,166 @@ def create_interface():
                 batch_stop_btn.click(
                     fn=lambda: True,
                     outputs=batch_stop_flag
+                )
+
+            with gr.Tab(i18n("custom_models_tab"), id="custom_models_tab"):
+                with gr.Row(equal_height=True):
+                    with gr.Column(scale=1, min_width=400):
+                        gr.Markdown(f"### {i18n('add_custom_model')}")
+                        gr.Markdown(i18n("custom_model_info"))
+                        
+                        with gr.Group():
+                            custom_model_name_input = gr.Textbox(
+                                label=i18n("custom_model_name"),
+                                placeholder=i18n("custom_model_name_placeholder"),
+                                interactive=True
+                            )
+                            custom_checkpoint_url = gr.Textbox(
+                                label=i18n("checkpoint_url"),
+                                placeholder=i18n("checkpoint_url_placeholder"),
+                                interactive=True
+                            )
+                            custom_config_url = gr.Textbox(
+                                label=i18n("config_url"),
+                                placeholder=i18n("config_url_placeholder"),
+                                interactive=True
+                            )
+                            custom_py_url = gr.Textbox(
+                                label=i18n("custom_py_url"),
+                                placeholder=i18n("custom_py_url_placeholder"),
+                                interactive=True
+                            )
+                        
+                        with gr.Row():
+                            auto_detect_checkbox = gr.Checkbox(
+                                label=i18n("auto_detect_type"),
+                                value=True,
+                                interactive=True
+                            )
+                            custom_model_type = gr.Dropdown(
+                                label=i18n("model_type"),
+                                choices=SUPPORTED_MODEL_TYPES,
+                                value="bs_roformer",
+                                interactive=True,
+                                visible=False
+                            )
+                        
+                        add_model_btn = gr.Button(i18n("add_model_btn"), variant="primary")
+                        add_model_status = gr.Textbox(label=i18n("status"), interactive=False)
+                    
+                    with gr.Column(scale=1, min_width=400):
+                        gr.Markdown(f"### {i18n('custom_models_list')}")
+                        
+                        custom_models_list_display = gr.Dataframe(
+                            headers=[i18n("custom_model_name"), i18n("model_type")],
+                            datatype=["str", "str"],
+                            label="",
+                            interactive=False,
+                            row_count=10
+                        )
+                        
+                        with gr.Row():
+                            delete_model_dropdown = gr.Dropdown(
+                                label=i18n("select_model_to_delete"),
+                                choices=[],
+                                interactive=True
+                            )
+                            delete_model_btn = gr.Button(i18n("delete_model"), variant="secondary")
+                        
+                        refresh_custom_models_btn = gr.Button(i18n("refresh_models"), variant="secondary")
+                        delete_model_status = gr.Textbox(label=i18n("status"), interactive=False)
+                
+                # Custom Models tab functions
+                def toggle_model_type_visibility(auto_detect):
+                    return gr.update(visible=not auto_detect)
+                
+                def refresh_custom_models_display():
+                    models_list = get_custom_models_list()
+                    if not models_list:
+                        return [[i18n("no_custom_models"), ""]], gr.update(choices=[])
+                    data = [[name, mtype] for name, mtype in models_list]
+                    choices = [name for name, _ in models_list]
+                    return data, gr.update(choices=choices)
+                
+                def add_model_handler(name, checkpoint_url, config_url, py_url, auto_detect, model_type):
+                    selected_type = "auto" if auto_detect else model_type
+                    success, message = add_custom_model(name, selected_type, checkpoint_url, config_url, py_url, auto_detect)
+                    if success:
+                        # Refresh the display
+                        models_list = get_custom_models_list()
+                        data = [[n, t] for n, t in models_list] if models_list else [[i18n("no_custom_models"), ""]]
+                        choices = [n for n, _ in models_list] if models_list else []
+                        # Get updated categories
+                        all_configs = get_all_model_configs_with_custom()
+                        category_choices = [i18n(cat) for cat in all_configs.keys()]
+                        return (
+                            i18n("model_added_success"),
+                            data,
+                            gr.update(choices=choices),
+                            gr.update(choices=category_choices),
+                            gr.update(choices=category_choices),
+                            gr.update(choices=category_choices),
+                            "", "", "", ""  # Clear input fields
+                        )
+                    return (
+                        i18n("model_add_error").format(message),
+                        gr.update(),
+                        gr.update(),
+                        gr.update(),
+                        gr.update(),
+                        gr.update(),
+                        gr.update(), gr.update(), gr.update(), gr.update()
+                    )
+                
+                def delete_model_handler(model_name):
+                    if not model_name:
+                        return i18n("select_model_to_delete"), gr.update(), gr.update()
+                    success, message = delete_custom_model(model_name)
+                    if success:
+                        models_list = get_custom_models_list()
+                        data = [[n, t] for n, t in models_list] if models_list else [[i18n("no_custom_models"), ""]]
+                        choices = [n for n, _ in models_list] if models_list else []
+                        # Get updated categories
+                        all_configs = get_all_model_configs_with_custom()
+                        category_choices = [i18n(cat) for cat in all_configs.keys()]
+                        return (
+                            i18n("model_deleted_success"),
+                            data,
+                            gr.update(choices=choices, value=None),
+                            gr.update(choices=category_choices),
+                            gr.update(choices=category_choices),
+                            gr.update(choices=category_choices)
+                        )
+                    return i18n("model_delete_error").format(message), gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
+                
+                # Event handlers
+                auto_detect_checkbox.change(
+                    fn=toggle_model_type_visibility,
+                    inputs=auto_detect_checkbox,
+                    outputs=custom_model_type
+                )
+                
+                add_model_btn.click(
+                    fn=add_model_handler,
+                    inputs=[custom_model_name_input, custom_checkpoint_url, custom_config_url, custom_py_url, auto_detect_checkbox, custom_model_type],
+                    outputs=[add_model_status, custom_models_list_display, delete_model_dropdown, model_category, auto_category_dropdown, batch_model_category, custom_model_name_input, custom_checkpoint_url, custom_config_url, custom_py_url]
+                )
+                
+                delete_model_btn.click(
+                    fn=delete_model_handler,
+                    inputs=delete_model_dropdown,
+                    outputs=[delete_model_status, custom_models_list_display, delete_model_dropdown, model_category, auto_category_dropdown, batch_model_category]
+                )
+                
+                refresh_custom_models_btn.click(
+                    fn=refresh_custom_models_display,
+                    outputs=[custom_models_list_display, delete_model_dropdown]
+                )
+                
+                # Initialize custom models display on load
+                demo.load(
+                    fn=refresh_custom_models_display,
+                    outputs=[custom_models_list_display, delete_model_dropdown]
                 )
 
         def save_settings_on_process(*args):
@@ -1196,7 +1357,8 @@ def create_interface():
 
         def update_category_dropdowns(cat):
             logging.debug(f"Input category: {cat}")
-            eng_cat = next((k for k in MODEL_CONFIGS.keys() if i18n(k) == cat), list(MODEL_CONFIGS.keys())[0])
+            all_configs = get_all_model_configs_with_custom()
+            eng_cat = next((k for k in all_configs.keys() if i18n(k) == cat), list(all_configs.keys())[0])
             logging.debug(f"Using English category: {eng_cat}")
             choices = update_model_dropdown(eng_cat, favorites=load_config()["favorites"])["choices"]
             logging.debug(f"Model choices: {choices}")
@@ -1233,9 +1395,9 @@ def create_interface():
         )
 
         auto_category_dropdown.change(
-            fn=lambda cat: gr.update(choices=update_model_dropdown(next((k for k in MODEL_CONFIGS.keys() if i18n(k) == cat), list(MODEL_CONFIGS.keys())[0]), favorites=load_config()["favorites"])["choices"]),
+            fn=lambda cat: gr.update(choices=update_model_dropdown(next((k for k in get_all_model_configs_with_custom().keys() if i18n(k) == cat), list(get_all_model_configs_with_custom().keys())[0]), favorites=load_config()["favorites"])["choices"]),
             inputs=auto_category_dropdown,
-                        outputs=selected_models
+            outputs=selected_models
         )
 
         def debug_inputs(*args):

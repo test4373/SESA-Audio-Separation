@@ -134,6 +134,9 @@ def get_model_from_config(model_type: str, config_path: str) -> Tuple:
     elif model_type == 'bs_roformer_experimental':
         from models.bs_roformer.bs_roformer_experimental import BSRoformer
         model = BSRoformer(**dict(config.model))
+    elif model_type == 'bs_roformer_custom':
+        from models.bs_roformer.bs_roformer_custom.bs_roformer import BSRoformer
+        model = BSRoformer(**dict(config.model))
     elif model_type == 'scnet_tran':
         from models.scnet.scnet_tran import SCNet_Tran
         model = SCNet_Tran(**config.model)
@@ -507,7 +510,7 @@ def load_not_compatible_weights(model: torch.nn.Module, weights: str, verbose: b
     """
 
     new_model = model.state_dict()
-    old_model = torch.load(weights)
+    old_model = torch.load(weights, weights_only=False)
     if 'state' in old_model:
         # Fix for htdemucs weights loading
         old_model = old_model['state']
@@ -575,7 +578,7 @@ def load_lora_weights(model: torch.nn.Module, lora_path: str, device: str = 'cpu
     None
         The model is updated in place.
     """
-    lora_state_dict = torch.load(lora_path, map_location=device)
+    lora_state_dict = torch.load(lora_path, map_location=device, weights_only=False)
     model.load_state_dict(lora_state_dict, strict=False)
 
 
@@ -594,7 +597,7 @@ def load_start_checkpoint(args: argparse.Namespace, model: torch.nn.Module, type
         if 1:
             load_not_compatible_weights(model, args.start_check_point, verbose=False)
         else:
-            model.load_state_dict(torch.load(args.start_check_point))
+            model.load_state_dict(torch.load(args.start_check_point, weights_only=False))
     else:
         device='cpu'
         if args.model_type in ['htdemucs', 'apollo']:

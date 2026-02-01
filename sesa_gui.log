@@ -1,0 +1,372 @@
+DEBUG:asyncio:Using proactor: IocpProactor
+DEBUG:urllib3.connectionpool:Starting new HTTPS connection (1): huggingface.co:443
+DEBUG:asyncio:Using proactor: IocpProactor
+DEBUG:asyncio:Using proactor: IocpProactor
+DEBUG:asyncio:Using proactor: IocpProactor
+DEBUG:httpcore.connection:connect_tcp.started host='api.gradio.app' port=443 local_address=None timeout=3 socket_options=None
+DEBUG:torio._extension.utils:Loading FFmpeg6
+DEBUG:torio._extension.utils:Failed to load FFmpeg6 extension.
+Traceback (most recent call last):
+  File "C:\Users\Yusuf\AppData\Local\Programs\Python\Python312\Lib\site-packages\torio\_extension\utils.py", line 116, in _find_ffmpeg_extension
+    ext = _find_versionsed_ffmpeg_extension(ffmpeg_ver)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Yusuf\AppData\Local\Programs\Python\Python312\Lib\site-packages\torio\_extension\utils.py", line 108, in _find_versionsed_ffmpeg_extension
+    _load_lib(lib)
+  File "C:\Users\Yusuf\AppData\Local\Programs\Python\Python312\Lib\site-packages\torio\_extension\utils.py", line 94, in _load_lib
+    torch.ops.load_library(path)
+  File "C:\Users\Yusuf\AppData\Local\Programs\Python\Python312\Lib\site-packages\torch\_ops.py", line 1357, in load_library
+    ctypes.CDLL(path)
+  File "C:\Users\Yusuf\AppData\Local\Programs\Python\Python312\Lib\ctypes\__init__.py", line 379, in __init__
+    self._handle = _dlopen(self._name, mode)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: Could not find module 'C:\Users\Yusuf\AppData\Local\Programs\Python\Python312\Lib\site-packages\torio\lib\libtorio_ffmpeg6.pyd' (or one of its dependencies). Try using the full path with constructor syntax.
+DEBUG:torio._extension.utils:Loading FFmpeg5
+DEBUG:torio._extension.utils:Failed to load FFmpeg5 extension.
+Traceback (most recent call last):
+  File "C:\Users\Yusuf\AppData\Local\Programs\Python\Python312\Lib\site-packages\torio\_extension\utils.py", line 116, in _find_ffmpeg_extension
+    ext = _find_versionsed_ffmpeg_extension(ffmpeg_ver)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Yusuf\AppData\Local\Programs\Python\Python312\Lib\site-packages\torio\_extension\utils.py", line 108, in _find_versionsed_ffmpeg_extension
+    _load_lib(lib)
+  File "C:\Users\Yusuf\AppData\Local\Programs\Python\Python312\Lib\site-packages\torio\_extension\utils.py", line 94, in _load_lib
+    torch.ops.load_library(path)
+  File "C:\Users\Yusuf\AppData\Local\Programs\Python\Python312\Lib\site-packages\torch\_ops.py", line 1357, in load_library
+    ctypes.CDLL(path)
+  File "C:\Users\Yusuf\AppData\Local\Programs\Python\Python312\Lib\ctypes\__init__.py", line 379, in __init__
+    self._handle = _dlopen(self._name, mode)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: Could not find module 'C:\Users\Yusuf\AppData\Local\Programs\Python\Python312\Lib\site-packages\torio\lib\libtorio_ffmpeg5.pyd' (or one of its dependencies). Try using the full path with constructor syntax.
+DEBUG:torio._extension.utils:Loading FFmpeg4
+DEBUG:torio._extension.utils:Failed to load FFmpeg4 extension.
+Traceback (most recent call last):
+  File "C:\Users\Yusuf\AppData\Local\Programs\Python\Python312\Lib\site-packages\torio\_extension\utils.py", line 116, in _find_ffmpeg_extension
+    ext = _find_versionsed_ffmpeg_extension(ffmpeg_ver)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Yusuf\AppData\Local\Programs\Python\Python312\Lib\site-packages\torio\_extension\utils.py", line 108, in _find_versionsed_ffmpeg_extension
+    _load_lib(lib)
+  File "C:\Users\Yusuf\AppData\Local\Programs\Python\Python312\Lib\site-packages\torio\_extension\utils.py", line 94, in _load_lib
+    torch.ops.load_library(path)
+  File "C:\Users\Yusuf\AppData\Local\Programs\Python\Python312\Lib\site-packages\torch\_ops.py", line 1357, in load_library
+    ctypes.CDLL(path)
+  File "C:\Users\Yusuf\AppData\Local\Programs\Python\Python312\Lib\ctypes\__init__.py", line 379, in __init__
+    self._handle = _dlopen(self._name, mode)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: Could not find module 'C:\Users\Yusuf\AppData\Local\Programs\Python\Python312\Lib\site-packages\torio\lib\libtorio_ffmpeg4.pyd' (or one of its dependencies). Try using the full path with constructor syntax.
+DEBUG:torio._extension.utils:Loading FFmpeg
+DEBUG:torio._extension.utils:Failed to load FFmpeg extension.
+Traceback (most recent call last):
+  File "C:\Users\Yusuf\AppData\Local\Programs\Python\Python312\Lib\site-packages\torio\_extension\utils.py", line 116, in _find_ffmpeg_extension
+    ext = _find_versionsed_ffmpeg_extension(ffmpeg_ver)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Yusuf\AppData\Local\Programs\Python\Python312\Lib\site-packages\torio\_extension\utils.py", line 106, in _find_versionsed_ffmpeg_extension
+    raise RuntimeError(f"FFmpeg{version} extension is not available.")
+RuntimeError: FFmpeg extension is not available.
+DEBUG:httpcore.connection:connect_tcp.complete return_value=<httpcore._backends.sync.SyncStream object at 0x000002B831CE2000>
+DEBUG:httpcore.connection:start_tls.started ssl_context=<ssl.SSLContext object at 0x000002B8317066D0> server_hostname='api.gradio.app' timeout=3
+DEBUG:asyncio:Using proactor: IocpProactor
+DEBUG:asyncio:Using proactor: IocpProactor
+DEBUG:urllib3.connectionpool:https://huggingface.co:443 "HEAD /api/telemetry/https%3A/api.gradio.app/gradio-initiated-analytics HTTP/1.1" 200 0
+DEBUG:asyncio:Using proactor: IocpProactor
+DEBUG:asyncio:Using proactor: IocpProactor
+DEBUG:asyncio:Using proactor: IocpProactor
+DEBUG:httpcore.connection:start_tls.complete return_value=<httpcore._backends.sync.SyncStream object at 0x000002B831CE00B0>
+DEBUG:httpcore.http11:send_request_headers.started request=<Request [b'GET']>
+DEBUG:httpcore.http11:send_request_headers.complete
+DEBUG:httpcore.http11:send_request_body.started request=<Request [b'GET']>
+DEBUG:httpcore.http11:send_request_body.complete
+DEBUG:httpcore.http11:receive_response_headers.started request=<Request [b'GET']>
+DEBUG:httpcore.connection:connect_tcp.started host='localhost' port=8073 local_address=None timeout=None socket_options=None
+DEBUG:httpcore.http11:receive_response_headers.complete return_value=(b'HTTP/1.1', 200, b'OK', [(b'Date', b'Sun, 01 Feb 2026 13:26:45 GMT'), (b'Content-Type', b'application/json'), (b'Content-Length', b'21'), (b'Connection', b'keep-alive'), (b'Server', b'nginx/1.18.0'), (b'Access-Control-Allow-Origin', b'*')])
+INFO:httpx:HTTP Request: GET https://api.gradio.app/pkg-version "HTTP/1.1 200 OK"
+DEBUG:httpcore.http11:receive_response_body.started request=<Request [b'GET']>
+DEBUG:httpcore.http11:receive_response_body.complete
+DEBUG:httpcore.http11:response_closed.started
+DEBUG:httpcore.http11:response_closed.complete
+DEBUG:httpcore.connection:close.started
+DEBUG:httpcore.connection:close.complete
+DEBUG:httpcore.connection:connect_tcp.complete return_value=<httpcore._backends.sync.SyncStream object at 0x000002B830BF7230>
+DEBUG:httpcore.http11:send_request_headers.started request=<Request [b'GET']>
+DEBUG:httpcore.http11:send_request_headers.complete
+DEBUG:httpcore.http11:send_request_body.started request=<Request [b'GET']>
+DEBUG:httpcore.http11:send_request_body.complete
+DEBUG:httpcore.http11:receive_response_headers.started request=<Request [b'GET']>
+DEBUG:httpcore.http11:receive_response_headers.complete return_value=(b'HTTP/1.1', 200, b'OK', [(b'date', b'Sun, 01 Feb 2026 13:26:47 GMT'), (b'server', b'uvicorn'), (b'content-length', b'4'), (b'content-type', b'application/json')])
+INFO:httpx:HTTP Request: GET http://localhost:8073/gradio_api/startup-events "HTTP/1.1 200 OK"
+DEBUG:httpcore.http11:receive_response_body.started request=<Request [b'GET']>
+DEBUG:httpcore.http11:receive_response_body.complete
+DEBUG:httpcore.http11:response_closed.started
+DEBUG:httpcore.http11:response_closed.complete
+DEBUG:httpcore.connection:close.started
+DEBUG:httpcore.connection:close.complete
+DEBUG:httpcore.connection:connect_tcp.started host='localhost' port=8073 local_address=None timeout=3 socket_options=None
+DEBUG:httpcore.connection:connect_tcp.complete return_value=<httpcore._backends.sync.SyncStream object at 0x000002B83323E9C0>
+DEBUG:httpcore.http11:send_request_headers.started request=<Request [b'HEAD']>
+DEBUG:httpcore.http11:send_request_headers.complete
+DEBUG:httpcore.http11:send_request_body.started request=<Request [b'HEAD']>
+DEBUG:httpcore.http11:send_request_body.complete
+DEBUG:httpcore.http11:receive_response_headers.started request=<Request [b'HEAD']>
+DEBUG:httpcore.http11:receive_response_headers.complete return_value=(b'HTTP/1.1', 200, b'OK', [(b'date', b'Sun, 01 Feb 2026 13:26:49 GMT'), (b'server', b'uvicorn'), (b'content-length', b'388302'), (b'content-type', b'text/html; charset=utf-8')])
+INFO:httpx:HTTP Request: HEAD http://localhost:8073/ "HTTP/1.1 200 OK"
+DEBUG:httpcore.http11:receive_response_body.started request=<Request [b'HEAD']>
+DEBUG:httpcore.http11:receive_response_body.complete
+DEBUG:httpcore.http11:response_closed.started
+DEBUG:httpcore.http11:response_closed.complete
+DEBUG:httpcore.connection:close.started
+DEBUG:httpcore.connection:close.complete
+DEBUG:httpcore.connection:connect_tcp.started host='api.gradio.app' port=443 local_address=None timeout=30 socket_options=None
+DEBUG:httpcore.connection:connect_tcp.complete return_value=<httpcore._backends.sync.SyncStream object at 0x000002B8332A1BE0>
+DEBUG:httpcore.connection:start_tls.started ssl_context=<ssl.SSLContext object at 0x000002B8333D81D0> server_hostname='api.gradio.app' timeout=30
+DEBUG:httpcore.connection:start_tls.complete return_value=<httpcore._backends.sync.SyncStream object at 0x000002B8332A1910>
+DEBUG:httpcore.http11:send_request_headers.started request=<Request [b'GET']>
+DEBUG:httpcore.http11:send_request_headers.complete
+DEBUG:httpcore.http11:send_request_body.started request=<Request [b'GET']>
+DEBUG:httpcore.http11:send_request_body.complete
+DEBUG:httpcore.http11:receive_response_headers.started request=<Request [b'GET']>
+DEBUG:httpcore.http11:receive_response_headers.complete return_value=(b'HTTP/1.1', 200, b'OK', [(b'Date', b'Sun, 01 Feb 2026 13:26:50 GMT'), (b'Content-Type', b'text/html; charset=utf-8'), (b'Transfer-Encoding', b'chunked'), (b'Connection', b'keep-alive'), (b'Server', b'nginx/1.18.0'), (b'ContentType', b'application/json'), (b'Access-Control-Allow-Origin', b'*'), (b'Content-Encoding', b'gzip')])
+INFO:httpx:HTTP Request: GET https://api.gradio.app/v3/tunnel-request "HTTP/1.1 200 OK"
+DEBUG:httpcore.http11:receive_response_body.started request=<Request [b'GET']>
+DEBUG:httpcore.http11:receive_response_body.complete
+DEBUG:httpcore.http11:response_closed.started
+DEBUG:httpcore.http11:response_closed.complete
+DEBUG:httpcore.connection:close.started
+DEBUG:httpcore.connection:close.complete
+DEBUG:httpcore.connection:connect_tcp.started host='cdn-media.huggingface.co' port=443 local_address=None timeout=30 socket_options=None
+DEBUG:httpcore.connection:connect_tcp.complete return_value=<httpcore._backends.sync.SyncStream object at 0x000002B8332A2450>
+DEBUG:httpcore.connection:start_tls.started ssl_context=<ssl.SSLContext object at 0x000002B8333D82D0> server_hostname='cdn-media.huggingface.co' timeout=30
+DEBUG:httpcore.connection:start_tls.complete return_value=<httpcore._backends.sync.SyncStream object at 0x000002B8332A1670>
+DEBUG:httpcore.http11:send_request_headers.started request=<Request [b'GET']>
+DEBUG:httpcore.http11:send_request_headers.complete
+DEBUG:httpcore.http11:send_request_body.started request=<Request [b'GET']>
+DEBUG:httpcore.http11:send_request_body.complete
+DEBUG:httpcore.http11:receive_response_headers.started request=<Request [b'GET']>
+DEBUG:httpcore.http11:receive_response_headers.complete return_value=(b'HTTP/1.1', 200, b'OK', [(b'Content-Type', b'application/x-msdownload'), (b'Content-Length', b'12315136'), (b'Connection', b'keep-alive'), (b'Last-Modified', b'Fri, 30 Aug 2024 02:33:49 GMT'), (b'x-amz-server-side-encryption', b'AES256'), (b'Accept-Ranges', b'bytes'), (b'Server', b'AmazonS3'), (b'Date', b'Sun, 01 Feb 2026 12:32:57 GMT'), (b'ETag', b'"6ac79215a7ced7e1e71a9ad173233f80"'), (b'Vary', b'accept-encoding'), (b'X-Cache', b'Hit from cloudfront'), (b'Via', b'1.1 02aeb7f16c6c229502db31b43fb88506.cloudfront.net (CloudFront)'), (b'X-Amz-Cf-Pop', b'AMS58-P6'), (b'X-Amz-Cf-Id', b'2MMZEssnHkfOjwWDcrH3Uxlxek6svy9xZ_rgA4hxYzCI_TW_zNGhzA=='), (b'Age', b'3561')])
+INFO:httpx:HTTP Request: GET https://cdn-media.huggingface.co/frpc-gradio-0.3/frpc_windows_amd64.exe "HTTP/1.1 200 OK"
+DEBUG:httpcore.http11:receive_response_body.started request=<Request [b'GET']>
+DEBUG:httpcore.http11:receive_response_body.complete
+DEBUG:httpcore.http11:response_closed.started
+DEBUG:httpcore.http11:response_closed.complete
+DEBUG:httpcore.connection:close.started
+DEBUG:httpcore.connection:close.complete
+DEBUG:urllib3.connectionpool:Starting new HTTPS connection (1): huggingface.co:443
+DEBUG:urllib3.connectionpool:https://huggingface.co:443 "HEAD /api/telemetry/https%3A/api.gradio.app/gradio-launched-telemetry HTTP/1.1" 200 0
+DEBUG:matplotlib:matplotlib data path: C:\Users\Yusuf\AppData\Local\Programs\Python\Python312\Lib\site-packages\matplotlib\mpl-data
+DEBUG:matplotlib:CONFIGDIR=C:\Users\Yusuf\.matplotlib
+DEBUG:matplotlib:interactive is False
+DEBUG:matplotlib:platform is win32
+DEBUG:matplotlib:CACHEDIR=C:\Users\Yusuf\.matplotlib
+DEBUG:matplotlib.font_manager:Using fontManager instance from C:\Users\Yusuf\.matplotlib\fontlist-v390.json
+DEBUG:matplotlib.pyplot:Loaded backend qtagg version 6.9.1.
+DEBUG:matplotlib.pyplot:Loaded backend agg version v2.2.
+DEBUG:root:Input category: Instrumental Models
+DEBUG:root:Using English category: Instrumental Models
+DEBUG:root:Model choices: ['Inst_GaboxFv8 (by Gabox)', 'INST-Mel-Roformer v1 (by unwa)', 'INST-Mel-Roformer v1e+ (by unwa)', 'INST-Mel-Roformer v1+ (by unwa)', 'INST-Mel-Roformer v2 (by unwa)', 'INST-VOC-Mel-Roformer a.k.a. duality (by unwa)', 'INST-VOC-Mel-Roformer a.k.a. duality v2 (by unwa)', 'INST-MelBand-Roformer (by Becruily)', 'inst_v1e (by unwa)', 'inst_gabox (by Gabox)', 'inst_gaboxBV1 (by Gabox)', 'inst_gaboxBV2 (by Gabox)', 'inst_gaboxBFV1 (by Gabox)', 'inst_gaboxFV2 (by Gabox)', 'inst_Fv3 (by Gabox)', 'Intrumental_Gabox (by Gabox)', 'inst_Fv4Noise (by Gabox)', 'INSTV5 (by Gabox)', 'inst_gaboxFV1 (by Gabox)', 'inst_gaboxFV6 (by Gabox)', 'INSTV5N (by Gabox)', 'INSTV6N (by Gabox)', 'Inst_GaboxV7 (by Gabox)', 'inst_Fv4 (by Gabox)', 'INSTV7N (by Gabox)', 'inst_fv7b (by Gabox)', 'inst_fv7z (by Gabox)', 'Inst_GaboxFv9 (by Gabox)', 'inst_gaboxFlowersV10 (by Gabox)', 'Inst_FV8b (by Gabox)', 'Inst_Fv8 (by Gabox)']
+DEBUG:matplotlib.pyplot:Loaded backend qtagg version 6.9.1.
+DEBUG:matplotlib.pyplot:Loaded backend agg version v2.2.
+DEBUG:root:Input category: Instrumental Models
+DEBUG:root:Using English category: Instrumental Models
+DEBUG:root:Model choices: ['Inst_GaboxFv8 (by Gabox)', 'INST-Mel-Roformer v1 (by unwa)', 'INST-Mel-Roformer v1e+ (by unwa)', 'INST-Mel-Roformer v1+ (by unwa)', 'INST-Mel-Roformer v2 (by unwa)', 'INST-VOC-Mel-Roformer a.k.a. duality (by unwa)', 'INST-VOC-Mel-Roformer a.k.a. duality v2 (by unwa)', 'INST-MelBand-Roformer (by Becruily)', 'inst_v1e (by unwa)', 'inst_gabox (by Gabox)', 'inst_gaboxBV1 (by Gabox)', 'inst_gaboxBV2 (by Gabox)', 'inst_gaboxBFV1 (by Gabox)', 'inst_gaboxFV2 (by Gabox)', 'inst_Fv3 (by Gabox)', 'Intrumental_Gabox (by Gabox)', 'inst_Fv4Noise (by Gabox)', 'INSTV5 (by Gabox)', 'inst_gaboxFV1 (by Gabox)', 'inst_gaboxFV6 (by Gabox)', 'INSTV5N (by Gabox)', 'INSTV6N (by Gabox)', 'Inst_GaboxV7 (by Gabox)', 'inst_Fv4 (by Gabox)', 'INSTV7N (by Gabox)', 'inst_fv7b (by Gabox)', 'inst_fv7z (by Gabox)', 'Inst_GaboxFv9 (by Gabox)', 'inst_gaboxFlowersV10 (by Gabox)', 'Inst_FV8b (by Gabox)', 'Inst_Fv8 (by Gabox)']
+DEBUG:matplotlib.pyplot:Loaded backend qtagg version 6.9.1.
+DEBUG:matplotlib.pyplot:Loaded backend agg version v2.2.
+DEBUG:matplotlib.pyplot:Loaded backend qtagg version 6.9.1.
+DEBUG:asyncio:Using proactor: IocpProactor
+DEBUG:urllib3.connectionpool:Starting new HTTPS connection (1): huggingface.co:443
+DEBUG:asyncio:Using proactor: IocpProactor
+DEBUG:asyncio:Using proactor: IocpProactor
+DEBUG:asyncio:Using proactor: IocpProactor
+DEBUG:httpcore.connection:connect_tcp.started host='api.gradio.app' port=443 local_address=None timeout=3 socket_options=None
+DEBUG:httpcore.connection:connect_tcp.complete return_value=<httpcore._backends.sync.SyncStream object at 0x00000247CAA0B1A0>
+DEBUG:httpcore.connection:start_tls.started ssl_context=<ssl.SSLContext object at 0x00000247CCCB78D0> server_hostname='api.gradio.app' timeout=3
+DEBUG:urllib3.connectionpool:https://huggingface.co:443 "HEAD /api/telemetry/https%3A/api.gradio.app/gradio-initiated-analytics HTTP/1.1" 200 0
+DEBUG:httpcore.connection:start_tls.complete return_value=<httpcore._backends.sync.SyncStream object at 0x00000247CBC54CE0>
+DEBUG:httpcore.http11:send_request_headers.started request=<Request [b'GET']>
+DEBUG:httpcore.http11:send_request_headers.complete
+DEBUG:httpcore.http11:send_request_body.started request=<Request [b'GET']>
+DEBUG:httpcore.http11:send_request_body.complete
+DEBUG:httpcore.http11:receive_response_headers.started request=<Request [b'GET']>
+DEBUG:httpcore.http11:receive_response_headers.complete return_value=(b'HTTP/1.1', 200, b'OK', [(b'Date', b'Sun, 01 Feb 2026 13:35:01 GMT'), (b'Content-Type', b'application/json'), (b'Content-Length', b'21'), (b'Connection', b'keep-alive'), (b'Server', b'nginx/1.18.0'), (b'Access-Control-Allow-Origin', b'*')])
+INFO:httpx:HTTP Request: GET https://api.gradio.app/pkg-version "HTTP/1.1 200 OK"
+DEBUG:httpcore.http11:receive_response_body.started request=<Request [b'GET']>
+DEBUG:httpcore.http11:receive_response_body.complete
+DEBUG:httpcore.http11:response_closed.started
+DEBUG:httpcore.http11:response_closed.complete
+DEBUG:httpcore.connection:close.started
+DEBUG:httpcore.connection:close.complete
+DEBUG:asyncio:Using proactor: IocpProactor
+DEBUG:urllib3.connectionpool:Starting new HTTPS connection (1): huggingface.co:443
+DEBUG:asyncio:Using proactor: IocpProactor
+DEBUG:asyncio:Using proactor: IocpProactor
+DEBUG:asyncio:Using proactor: IocpProactor
+DEBUG:asyncio:Using proactor: IocpProactor
+DEBUG:asyncio:Using proactor: IocpProactor
+DEBUG:httpcore.connection:connect_tcp.started host='api.gradio.app' port=443 local_address=None timeout=3 socket_options=None
+DEBUG:asyncio:Using proactor: IocpProactor
+DEBUG:asyncio:Using proactor: IocpProactor
+DEBUG:asyncio:Using proactor: IocpProactor
+DEBUG:httpcore.connection:connect_tcp.complete return_value=<httpcore._backends.sync.SyncStream object at 0x00000217A681D190>
+DEBUG:httpcore.connection:start_tls.started ssl_context=<ssl.SSLContext object at 0x00000217A53D3C50> server_hostname='api.gradio.app' timeout=3
+DEBUG:urllib3.connectionpool:https://huggingface.co:443 "HEAD /api/telemetry/https%3A/api.gradio.app/gradio-initiated-analytics HTTP/1.1" 200 0
+DEBUG:httpcore.connection:connect_tcp.started host='localhost' port=2085 local_address=None timeout=None socket_options=None
+DEBUG:httpcore.connection:start_tls.complete return_value=<httpcore._backends.sync.SyncStream object at 0x00000217A68FD820>
+DEBUG:httpcore.http11:send_request_headers.started request=<Request [b'GET']>
+DEBUG:httpcore.http11:send_request_headers.complete
+DEBUG:httpcore.http11:send_request_body.started request=<Request [b'GET']>
+DEBUG:httpcore.http11:send_request_body.complete
+DEBUG:httpcore.http11:receive_response_headers.started request=<Request [b'GET']>
+DEBUG:httpcore.http11:receive_response_headers.complete return_value=(b'HTTP/1.1', 200, b'OK', [(b'Date', b'Sun, 01 Feb 2026 13:35:57 GMT'), (b'Content-Type', b'application/json'), (b'Content-Length', b'21'), (b'Connection', b'keep-alive'), (b'Server', b'nginx/1.18.0'), (b'Access-Control-Allow-Origin', b'*')])
+INFO:httpx:HTTP Request: GET https://api.gradio.app/pkg-version "HTTP/1.1 200 OK"
+DEBUG:httpcore.http11:receive_response_body.started request=<Request [b'GET']>
+DEBUG:httpcore.http11:receive_response_body.complete
+DEBUG:httpcore.http11:response_closed.started
+DEBUG:httpcore.http11:response_closed.complete
+DEBUG:httpcore.connection:close.started
+DEBUG:httpcore.connection:close.complete
+DEBUG:httpcore.connection:connect_tcp.complete return_value=<httpcore._backends.sync.SyncStream object at 0x00000217A53BF170>
+DEBUG:httpcore.http11:send_request_headers.started request=<Request [b'GET']>
+DEBUG:httpcore.http11:send_request_headers.complete
+DEBUG:httpcore.http11:send_request_body.started request=<Request [b'GET']>
+DEBUG:httpcore.http11:send_request_body.complete
+DEBUG:httpcore.http11:receive_response_headers.started request=<Request [b'GET']>
+DEBUG:httpcore.http11:receive_response_headers.complete return_value=(b'HTTP/1.1', 200, b'OK', [(b'date', b'Sun, 01 Feb 2026 13:35:59 GMT'), (b'server', b'uvicorn'), (b'content-length', b'4'), (b'content-type', b'application/json')])
+INFO:httpx:HTTP Request: GET http://localhost:2085/gradio_api/startup-events "HTTP/1.1 200 OK"
+DEBUG:httpcore.http11:receive_response_body.started request=<Request [b'GET']>
+DEBUG:httpcore.http11:receive_response_body.complete
+DEBUG:httpcore.http11:response_closed.started
+DEBUG:httpcore.http11:response_closed.complete
+DEBUG:httpcore.connection:close.started
+DEBUG:httpcore.connection:close.complete
+DEBUG:httpcore.connection:connect_tcp.started host='localhost' port=2085 local_address=None timeout=3 socket_options=None
+DEBUG:httpcore.connection:connect_tcp.complete return_value=<httpcore._backends.sync.SyncStream object at 0x00000217A6B12150>
+DEBUG:httpcore.http11:send_request_headers.started request=<Request [b'HEAD']>
+DEBUG:httpcore.http11:send_request_headers.complete
+DEBUG:httpcore.http11:send_request_body.started request=<Request [b'HEAD']>
+DEBUG:httpcore.http11:send_request_body.complete
+DEBUG:httpcore.http11:receive_response_headers.started request=<Request [b'HEAD']>
+DEBUG:httpcore.http11:receive_response_headers.complete return_value=(b'HTTP/1.1', 200, b'OK', [(b'date', b'Sun, 01 Feb 2026 13:36:01 GMT'), (b'server', b'uvicorn'), (b'content-length', b'396735'), (b'content-type', b'text/html; charset=utf-8')])
+INFO:httpx:HTTP Request: HEAD http://localhost:2085/ "HTTP/1.1 200 OK"
+DEBUG:httpcore.http11:receive_response_body.started request=<Request [b'HEAD']>
+DEBUG:httpcore.http11:receive_response_body.complete
+DEBUG:httpcore.http11:response_closed.started
+DEBUG:httpcore.http11:response_closed.complete
+DEBUG:httpcore.connection:close.started
+DEBUG:httpcore.connection:close.complete
+DEBUG:httpcore.connection:connect_tcp.started host='api.gradio.app' port=443 local_address=None timeout=30 socket_options=None
+DEBUG:httpcore.connection:connect_tcp.complete return_value=<httpcore._backends.sync.SyncStream object at 0x00000217A6B7CDD0>
+DEBUG:httpcore.connection:start_tls.started ssl_context=<ssl.SSLContext object at 0x00000217A6CA4250> server_hostname='api.gradio.app' timeout=30
+DEBUG:httpcore.connection:start_tls.complete return_value=<httpcore._backends.sync.SyncStream object at 0x00000217A6B7D160>
+DEBUG:httpcore.http11:send_request_headers.started request=<Request [b'GET']>
+DEBUG:httpcore.http11:send_request_headers.complete
+DEBUG:httpcore.http11:send_request_body.started request=<Request [b'GET']>
+DEBUG:httpcore.http11:send_request_body.complete
+DEBUG:httpcore.http11:receive_response_headers.started request=<Request [b'GET']>
+DEBUG:httpcore.http11:receive_response_headers.complete return_value=(b'HTTP/1.1', 200, b'OK', [(b'Date', b'Sun, 01 Feb 2026 13:36:02 GMT'), (b'Content-Type', b'text/html; charset=utf-8'), (b'Transfer-Encoding', b'chunked'), (b'Connection', b'keep-alive'), (b'Server', b'nginx/1.18.0'), (b'ContentType', b'application/json'), (b'Access-Control-Allow-Origin', b'*'), (b'Content-Encoding', b'gzip')])
+INFO:httpx:HTTP Request: GET https://api.gradio.app/v3/tunnel-request "HTTP/1.1 200 OK"
+DEBUG:httpcore.http11:receive_response_body.started request=<Request [b'GET']>
+DEBUG:httpcore.http11:receive_response_body.complete
+DEBUG:httpcore.http11:response_closed.started
+DEBUG:httpcore.http11:response_closed.complete
+DEBUG:httpcore.connection:close.started
+DEBUG:httpcore.connection:close.complete
+DEBUG:urllib3.connectionpool:Starting new HTTPS connection (1): huggingface.co:443
+DEBUG:urllib3.connectionpool:https://huggingface.co:443 "HEAD /api/telemetry/https%3A/api.gradio.app/gradio-launched-telemetry HTTP/1.1" 200 0
+DEBUG:asyncio:Using proactor: IocpProactor
+DEBUG:urllib3.connectionpool:Starting new HTTPS connection (1): huggingface.co:443
+DEBUG:asyncio:Using proactor: IocpProactor
+DEBUG:asyncio:Using proactor: IocpProactor
+DEBUG:asyncio:Using proactor: IocpProactor
+DEBUG:httpcore.connection:connect_tcp.started host='api.gradio.app' port=443 local_address=None timeout=3 socket_options=None
+DEBUG:matplotlib:matplotlib data path: C:\Users\Yusuf\AppData\Local\Programs\Python\Python312\Lib\site-packages\matplotlib\mpl-data
+DEBUG:matplotlib:CONFIGDIR=C:\Users\Yusuf\.matplotlib
+DEBUG:matplotlib:interactive is False
+DEBUG:matplotlib:platform is win32
+DEBUG:matplotlib:CACHEDIR=C:\Users\Yusuf\.matplotlib
+DEBUG:matplotlib.font_manager:Using fontManager instance from C:\Users\Yusuf\.matplotlib\fontlist-v390.json
+DEBUG:urllib3.connectionpool:https://huggingface.co:443 "HEAD /api/telemetry/https%3A/api.gradio.app/gradio-initiated-analytics HTTP/1.1" 200 0
+DEBUG:asyncio:Using proactor: IocpProactor
+DEBUG:httpcore.connection:connect_tcp.complete return_value=<httpcore._backends.sync.SyncStream object at 0x000002BAFDA3B8F0>
+DEBUG:httpcore.connection:start_tls.started ssl_context=<ssl.SSLContext object at 0x000002BAFC10EE50> server_hostname='api.gradio.app' timeout=3
+DEBUG:asyncio:Using proactor: IocpProactor
+DEBUG:asyncio:Using proactor: IocpProactor
+DEBUG:asyncio:Using proactor: IocpProactor
+DEBUG:asyncio:Using proactor: IocpProactor
+DEBUG:httpcore.connection:connect_tcp.started host='localhost' port=4605 local_address=None timeout=None socket_options=None
+DEBUG:httpcore.connection:start_tls.complete return_value=<httpcore._backends.sync.SyncStream object at 0x000002BAFD5FD820>
+DEBUG:httpcore.http11:send_request_headers.started request=<Request [b'GET']>
+DEBUG:httpcore.http11:send_request_headers.complete
+DEBUG:httpcore.http11:send_request_body.started request=<Request [b'GET']>
+DEBUG:httpcore.http11:send_request_body.complete
+DEBUG:httpcore.http11:receive_response_headers.started request=<Request [b'GET']>
+DEBUG:httpcore.http11:receive_response_headers.complete return_value=(b'HTTP/1.1', 200, b'OK', [(b'Date', b'Sun, 01 Feb 2026 13:41:48 GMT'), (b'Content-Type', b'application/json'), (b'Content-Length', b'21'), (b'Connection', b'keep-alive'), (b'Server', b'nginx/1.18.0'), (b'Access-Control-Allow-Origin', b'*')])
+INFO:httpx:HTTP Request: GET https://api.gradio.app/pkg-version "HTTP/1.1 200 OK"
+DEBUG:httpcore.http11:receive_response_body.started request=<Request [b'GET']>
+DEBUG:httpcore.http11:receive_response_body.complete
+DEBUG:httpcore.http11:response_closed.started
+DEBUG:httpcore.http11:response_closed.complete
+DEBUG:httpcore.connection:close.started
+DEBUG:httpcore.connection:close.complete
+DEBUG:httpcore.connection:connect_tcp.complete return_value=<httpcore._backends.sync.SyncStream object at 0x000002BAFB2DCCB0>
+DEBUG:httpcore.http11:send_request_headers.started request=<Request [b'GET']>
+DEBUG:httpcore.http11:send_request_headers.complete
+DEBUG:httpcore.http11:send_request_body.started request=<Request [b'GET']>
+DEBUG:httpcore.http11:send_request_body.complete
+DEBUG:httpcore.http11:receive_response_headers.started request=<Request [b'GET']>
+DEBUG:httpcore.http11:receive_response_headers.complete return_value=(b'HTTP/1.1', 200, b'OK', [(b'date', b'Sun, 01 Feb 2026 13:41:50 GMT'), (b'server', b'uvicorn'), (b'content-length', b'4'), (b'content-type', b'application/json')])
+INFO:httpx:HTTP Request: GET http://localhost:4605/gradio_api/startup-events "HTTP/1.1 200 OK"
+DEBUG:httpcore.http11:receive_response_body.started request=<Request [b'GET']>
+DEBUG:httpcore.http11:receive_response_body.complete
+DEBUG:httpcore.http11:response_closed.started
+DEBUG:httpcore.http11:response_closed.complete
+DEBUG:httpcore.connection:close.started
+DEBUG:httpcore.connection:close.complete
+DEBUG:httpcore.connection:connect_tcp.started host='localhost' port=4605 local_address=None timeout=3 socket_options=None
+DEBUG:httpcore.connection:connect_tcp.complete return_value=<httpcore._backends.sync.SyncStream object at 0x000002BAFE4C8FB0>
+DEBUG:httpcore.http11:send_request_headers.started request=<Request [b'HEAD']>
+DEBUG:httpcore.http11:send_request_headers.complete
+DEBUG:httpcore.http11:send_request_body.started request=<Request [b'HEAD']>
+DEBUG:httpcore.http11:send_request_body.complete
+DEBUG:httpcore.http11:receive_response_headers.started request=<Request [b'HEAD']>
+DEBUG:httpcore.http11:receive_response_headers.complete return_value=(b'HTTP/1.1', 200, b'OK', [(b'date', b'Sun, 01 Feb 2026 13:41:52 GMT'), (b'server', b'uvicorn'), (b'content-length', b'444633'), (b'content-type', b'text/html; charset=utf-8')])
+INFO:httpx:HTTP Request: HEAD http://localhost:4605/ "HTTP/1.1 200 OK"
+DEBUG:httpcore.http11:receive_response_body.started request=<Request [b'HEAD']>
+DEBUG:httpcore.http11:receive_response_body.complete
+DEBUG:httpcore.http11:response_closed.started
+DEBUG:httpcore.http11:response_closed.complete
+DEBUG:httpcore.connection:close.started
+DEBUG:httpcore.connection:close.complete
+DEBUG:httpcore.connection:connect_tcp.started host='api.gradio.app' port=443 local_address=None timeout=30 socket_options=None
+DEBUG:httpcore.connection:connect_tcp.complete return_value=<httpcore._backends.sync.SyncStream object at 0x000002BAFE699280>
+DEBUG:httpcore.connection:start_tls.started ssl_context=<ssl.SSLContext object at 0x000002BAFE770050> server_hostname='api.gradio.app' timeout=30
+DEBUG:httpcore.connection:start_tls.complete return_value=<httpcore._backends.sync.SyncStream object at 0x000002BAFE699220>
+DEBUG:httpcore.http11:send_request_headers.started request=<Request [b'GET']>
+DEBUG:httpcore.http11:send_request_headers.complete
+DEBUG:httpcore.http11:send_request_body.started request=<Request [b'GET']>
+DEBUG:httpcore.http11:send_request_body.complete
+DEBUG:httpcore.http11:receive_response_headers.started request=<Request [b'GET']>
+DEBUG:httpcore.http11:receive_response_headers.complete return_value=(b'HTTP/1.1', 200, b'OK', [(b'Date', b'Sun, 01 Feb 2026 13:41:53 GMT'), (b'Content-Type', b'text/html; charset=utf-8'), (b'Transfer-Encoding', b'chunked'), (b'Connection', b'keep-alive'), (b'Server', b'nginx/1.18.0'), (b'ContentType', b'application/json'), (b'Access-Control-Allow-Origin', b'*'), (b'Content-Encoding', b'gzip')])
+INFO:httpx:HTTP Request: GET https://api.gradio.app/v3/tunnel-request "HTTP/1.1 200 OK"
+DEBUG:httpcore.http11:receive_response_body.started request=<Request [b'GET']>
+DEBUG:httpcore.http11:receive_response_body.complete
+DEBUG:httpcore.http11:response_closed.started
+DEBUG:httpcore.http11:response_closed.complete
+DEBUG:httpcore.connection:close.started
+DEBUG:httpcore.connection:close.complete
+DEBUG:urllib3.connectionpool:Starting new HTTPS connection (1): huggingface.co:443
+DEBUG:urllib3.connectionpool:https://huggingface.co:443 "HEAD /api/telemetry/https%3A/api.gradio.app/gradio-launched-telemetry HTTP/1.1" 200 0
+DEBUG:matplotlib.pyplot:Loaded backend qtagg version 6.9.1.
+DEBUG:matplotlib.pyplot:Loaded backend agg version v2.2.
+DEBUG:matplotlib.pyplot:Loaded backend qtagg version 6.9.1.
+DEBUG:matplotlib.pyplot:Loaded backend agg version v2.2.
+DEBUG:matplotlib.pyplot:Loaded backend qtagg version 6.9.1.
+DEBUG:matplotlib.pyplot:Loaded backend agg version v2.2.
+DEBUG:matplotlib.pyplot:Loaded backend qtagg version 6.9.1.
+DEBUG:matplotlib.pyplot:Loaded backend agg version v2.2.
+DEBUG:matplotlib.pyplot:Loaded backend qtagg version 6.9.1.
+DEBUG:matplotlib.pyplot:Loaded backend agg version v2.2.
+DEBUG:root:Input category: Instrumental Models
+DEBUG:root:Using English category: Instrumental Models
+DEBUG:root:Model choices: ['Inst_GaboxFv8 (by Gabox)', 'INST-Mel-Roformer v1 (by unwa)', 'INST-Mel-Roformer v1e+ (by unwa)', 'INST-Mel-Roformer v1+ (by unwa)', 'INST-Mel-Roformer v2 (by unwa)', 'INST-VOC-Mel-Roformer a.k.a. duality (by unwa)', 'INST-VOC-Mel-Roformer a.k.a. duality v2 (by unwa)', 'INST-MelBand-Roformer (by Becruily)', 'inst_v1e (by unwa)', 'inst_gabox (by Gabox)', 'inst_gaboxBV1 (by Gabox)', 'inst_gaboxBV2 (by Gabox)', 'inst_gaboxBFV1 (by Gabox)', 'inst_gaboxFV2 (by Gabox)', 'inst_Fv3 (by Gabox)', 'Intrumental_Gabox (by Gabox)', 'inst_Fv4Noise (by Gabox)', 'INSTV5 (by Gabox)', 'inst_gaboxFV1 (by Gabox)', 'inst_gaboxFV6 (by Gabox)', 'INSTV5N (by Gabox)', 'INSTV6N (by Gabox)', 'Inst_GaboxV7 (by Gabox)', 'inst_Fv4 (by Gabox)', 'INSTV7N (by Gabox)', 'inst_fv7b (by Gabox)', 'inst_fv7z (by Gabox)', 'Inst_GaboxFv9 (by Gabox)', 'inst_gaboxFlowersV10 (by Gabox)', 'Inst_FV8b (by Gabox)', 'Inst_Fv8 (by Gabox)']
+DEBUG:matplotlib.pyplot:Loaded backend qtagg version 6.9.1.
+DEBUG:matplotlib.pyplot:Loaded backend agg version v2.2.
+DEBUG:root:Input category: Instrumental Models
+DEBUG:root:Using English category: Instrumental Models
+DEBUG:root:Model choices: ['Inst_GaboxFv8 (by Gabox)', 'INST-Mel-Roformer v1 (by unwa)', 'INST-Mel-Roformer v1e+ (by unwa)', 'INST-Mel-Roformer v1+ (by unwa)', 'INST-Mel-Roformer v2 (by unwa)', 'INST-VOC-Mel-Roformer a.k.a. duality (by unwa)', 'INST-VOC-Mel-Roformer a.k.a. duality v2 (by unwa)', 'INST-MelBand-Roformer (by Becruily)', 'inst_v1e (by unwa)', 'inst_gabox (by Gabox)', 'inst_gaboxBV1 (by Gabox)', 'inst_gaboxBV2 (by Gabox)', 'inst_gaboxBFV1 (by Gabox)', 'inst_gaboxFV2 (by Gabox)', 'inst_Fv3 (by Gabox)', 'Intrumental_Gabox (by Gabox)', 'inst_Fv4Noise (by Gabox)', 'INSTV5 (by Gabox)', 'inst_gaboxFV1 (by Gabox)', 'inst_gaboxFV6 (by Gabox)', 'INSTV5N (by Gabox)', 'INSTV6N (by Gabox)', 'Inst_GaboxV7 (by Gabox)', 'inst_Fv4 (by Gabox)', 'INSTV7N (by Gabox)', 'inst_fv7b (by Gabox)', 'inst_fv7z (by Gabox)', 'Inst_GaboxFv9 (by Gabox)', 'inst_gaboxFlowersV10 (by Gabox)', 'Inst_FV8b (by Gabox)', 'Inst_Fv8 (by Gabox)']
+DEBUG:matplotlib.pyplot:Loaded backend qtagg version 6.9.1.

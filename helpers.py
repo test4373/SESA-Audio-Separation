@@ -45,7 +45,7 @@ from urllib.parse import urlparse, quote
 import argparse
 from tqdm.auto import tqdm
 import torch.nn as nn
-from model import get_model_config, MODEL_CONFIGS
+from model import get_model_config, MODEL_CONFIGS, get_all_model_configs_with_custom, load_custom_models
 from assets.i18n.i18n import I18nAuto
 import matchering as mg
 from scipy.signal import find_peaks
@@ -105,7 +105,8 @@ def clean_model(model):
     return cleaned
 
 def get_original_category(translated_category):
-    for original_cat in MODEL_CONFIGS.keys():
+    all_configs = get_all_model_configs_with_custom()
+    for original_cat in all_configs.keys():
         if i18n(original_cat) == translated_category:
             return original_cat
     return None
@@ -119,9 +120,11 @@ def clamp_percentage(value):
         return 0    
 
 def update_model_dropdown(category, favorites=None):
+    # Get all configs including custom models
+    all_configs = get_all_model_configs_with_custom()
     # Map translated category back to English
-    eng_cat = next((k for k in MODEL_CONFIGS.keys() if i18n(k) == category), list(MODEL_CONFIGS.keys())[0])
-    models = MODEL_CONFIGS.get(eng_cat, [])
+    eng_cat = next((k for k in all_configs.keys() if i18n(k) == category), list(all_configs.keys())[0])
+    models = all_configs.get(eng_cat, {})
     choices = []
     favorite_models = []
     non_favorite_models = []
@@ -135,6 +138,11 @@ def update_model_dropdown(category, favorites=None):
     
     choices = favorite_models + non_favorite_models
     return {"choices": choices}
+
+def get_model_categories():
+    """Get all model categories including Custom Models if any exist."""
+    all_configs = get_all_model_configs_with_custom()
+    return list(all_configs.keys())
 
 def handle_file_upload(uploaded_file, file_path, is_auto_ensemble=False):
     clear_temp_folder("/tmp", exclude_items=["gradio", "config.json"])
