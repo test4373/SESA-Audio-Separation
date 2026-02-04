@@ -2,13 +2,85 @@ import os
 import yaml
 import json
 import re
-from urllib.parse import quote
+import shutil
+from urllib.parse import quote, urlparse
 from pathlib import Path
 
 # Temel dizin ve checkpoint dizini sabit olarak tanımlanıyor
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 CHECKPOINT_DIR = os.path.join(BASE_DIR, 'ckpts')
 CUSTOM_MODELS_FILE = os.path.join(BASE_DIR, 'assets', 'custom_models.json')
+
+
+def fix_huggingface_url(url):
+    """Convert Hugging Face blob URLs to raw/resolve URLs.
+    
+    Hugging Face has two URL formats:
+    - /blob/ URLs show the web page (HTML) - WRONG for downloading
+    - /resolve/ URLs provide the raw file content - CORRECT for downloading
+    
+    This function converts blob URLs to resolve URLs automatically.
+    
+    Args:
+        url: The URL to fix
+        
+    Returns:
+        The corrected URL (or original if not a HF blob URL)
+    """
+    if not url:
+        return url
+    
+    # Check if it's a Hugging Face URL with /blob/
+    if 'huggingface.co' in url and '/blob/' in url:
+        fixed_url = url.replace('/blob/', '/resolve/')
+        print(f"Auto-converted HuggingFace URL: /blob/ -> /resolve/")
+        return fixed_url
+    
+    return url
+
+
+def validate_yaml_content(content, filepath=None):
+    """Validate that content is YAML and not HTML.
+    
+    Args:
+        content: The file content to validate
+        filepath: Optional filepath for error messages
+        
+    Returns:
+        tuple: (is_valid: bool, error_message: str or None)
+    """
+    # Check if content looks like HTML
+    html_indicators = [
+        '<!DOCTYPE',
+        '<html',
+        '<head>',
+        '<body>',
+        '<script>',
+        '<link rel=',
+        'text/html',
+    ]
+    
+    content_lower = content.lower() if isinstance(content, str) else content.decode('utf-8', errors='ignore').lower()
+    
+    for indicator in html_indicators:
+        if indicator.lower() in content_lower:
+            error_msg = f"""
+The downloaded file appears to be an HTML page, not a YAML config file.
+{"File: " + filepath if filepath else ""}
+
+This usually happens when using a Hugging Face '/blob/' URL instead of a '/resolve/' URL.
+
+To fix this:
+1. Use the raw file URL with '/resolve/' instead of '/blob/'
+   Example: https://huggingface.co/user/repo/resolve/main/file.yaml
+   
+2. Or copy the raw URL from Hugging Face:
+   - Go to the file on Hugging Face
+   - Click "Download" or right-click and "Copy link address"
+"""
+            return False, error_msg
+    
+    return True, None
 
 # Supported model types for auto-detection and manual selection
 SUPPORTED_MODEL_TYPES = [
@@ -92,6 +164,12 @@ def add_custom_model(model_name, model_type, checkpoint_url, config_url, custom_
     config_url = config_url.strip()
     custom_model_url = custom_model_url.strip() if custom_model_url else None
     
+    # Auto-fix Hugging Face URLs
+    checkpoint_url = fix_huggingface_url(checkpoint_url)
+    config_url = fix_huggingface_url(config_url)
+    if custom_model_url:
+        custom_model_url = fix_huggingface_url(custom_model_url)
+    
     if auto_detect and (not model_type or model_type == "auto"):
         detected_type = detect_model_type_from_url(checkpoint_url, config_url)
         if not detected_type:
@@ -151,36 +229,259 @@ def get_custom_models_list():
     models = load_custom_models()
     return [(name, config.get('model_type', 'unknown')) for name, config in models.items()]
 
-def conf_edit(config_path, chunk_size, overlap):
-    """Edits the configuration file with chunk size and overlap."""
+def preprocess_yaml_content(content):
+    """Pre-process YAML content to fix common issues before parsing.
+    
+    Fixes:
+    - Replaces tabs with spaces
+    - Attempts to quote unquoted URLs and paths containing colons
+    """
+    # Replace tabs with spaces
+    if '\t' in content:
+        content = content.replace('\t', '    ')
+    
+    # Fix unquoted URLs/paths with colons in values (common issue)
+    # This regex finds lines like "key: http://..." or "key: C:\path" and quotes the value
+    lines = content.split('\n')
+    fixed_lines = []
+    
+    for line in lines:
+        # Skip comments and empty lines
+        stripped = line.strip()
+        if not stripped or stripped.startswith('#'):
+            fixed_lines.append(line)
+            continue
+        
+        # Check if line has a key-value pattern with potential problematic value
+        # Match: "  key: value_with_colon_or_backslash"
+        match = re.match(r'^(\s*)([^:#]+?):\s+(.+)$', line)
+        if match:
+            indent, key, value = match.groups()
+            # Check if value contains a colon (like URL) or backslash (like Windows path)
+            # and is not already quoted
+            if ((':' in value or '\\' in value) and 
+                not (value.startswith('"') and value.endswith('"')) and
+                not (value.startswith("'") and value.endswith("'"))):
+                # Quote the value
+                escaped_value = value.replace('"', '\\"')
+                fixed_lines.append(f'{indent}{key}: "{escaped_value}"')
+                continue
+        
+        fixed_lines.append(line)
+    
+    return '\n'.join(fixed_lines)
+
+
+def get_yaml_error_context(content, line_num, column=None):
+    """Get context around a YAML error for better debugging."""
+    lines = content.split('\n')
+    if line_num < 1 or line_num > len(lines):
+        return "Could not extract error context"
+    
+    context_lines = []
+    start = max(0, line_num - 3)
+    end = min(len(lines), line_num + 2)
+    
+    for i in range(start, end):
+        line_indicator = ">>> " if i == line_num - 1 else "    "
+        context_lines.append(f"{line_indicator}{i + 1}: {lines[i]}")
+        
+        # Add column indicator for the error line
+        if i == line_num - 1 and column:
+            pointer = " " * (len(str(i + 1)) + 6 + column - 1) + "^"
+            context_lines.append(pointer)
+    
+    return '\n'.join(context_lines)
+
+
+def conf_edit(config_path, chunk_size, overlap, model_name=None):
+    """Edits the configuration file with chunk size and overlap.
+    
+    Args:
+        config_path: Path to the config file
+        chunk_size: Audio chunk size for processing
+        overlap: Overlap between chunks
+        model_name: Optional model name for re-downloading config on error
+    """
     full_config_path = os.path.join(CHECKPOINT_DIR, os.path.basename(config_path))
     if not os.path.exists(full_config_path):
         raise FileNotFoundError(f"Configuration file not found: {full_config_path}")
     
-    with open(full_config_path, 'r') as f:
-        data = yaml.load(f, Loader=yaml.SafeLoader)
+    # Create backup before modifying
+    backup_path = full_config_path + '.backup'
+    try:
+        shutil.copy2(full_config_path, backup_path)
+    except Exception as e:
+        print(f"Warning: Could not create backup: {e}")
+    
+    try:
+        # Read and pre-process content
+        with open(full_config_path, 'r', encoding='utf-8') as f:
+            original_content = f.read()
+        
+        # Check if file is HTML (wrong URL was used)
+        is_valid, html_error = validate_yaml_content(original_content, full_config_path)
+        if not is_valid:
+            # Restore backup and raise error
+            if os.path.exists(backup_path):
+                shutil.copy2(backup_path, full_config_path)
+            raise ValueError(html_error)
+        
+        content = preprocess_yaml_content(original_content)
+        
+        # Write pre-processed content if changed
+        if content != original_content:
+            print("Fixed YAML formatting issues in config file")
+            with open(full_config_path, 'w', encoding='utf-8') as f:
+                f.write(content)
+        
+        # Try to parse YAML
+        try:
+            with open(full_config_path, 'r', encoding='utf-8') as f:
+                data = yaml.load(f, Loader=yaml.SafeLoader)
+        except yaml.YAMLError as e:
+            # Extract error details
+            error_msg = str(e)
+            line_num = None
+            column = None
+            
+            if hasattr(e, 'problem_mark') and e.problem_mark:
+                line_num = e.problem_mark.line + 1
+                column = e.problem_mark.column + 1
+            
+            # Get context around error
+            context = ""
+            if line_num:
+                context = get_yaml_error_context(content, line_num, column)
+            
+            # Provide helpful error message
+            error_details = f"""
+YAML Parsing Error in config file: {full_config_path}
 
-    if 'use_amp' not in data.keys():
-        data['training']['use_amp'] = True
+Error: {error_msg}
 
-    data['audio']['chunk_size'] = chunk_size
-    data['inference']['num_overlap'] = overlap
-    if data['inference']['batch_size'] == 1:
-        data['inference']['batch_size'] = 2
+{"Error Context:" + chr(10) + context if context else ""}
 
-    print(f"Using custom overlap and chunk_size: overlap={overlap}, chunk_size={chunk_size}")
-    with open(full_config_path, 'w') as f:
-        yaml.dump(data, f, default_flow_style=False, sort_keys=False, Dumper=yaml.Dumper)
+Possible causes:
+1. Unquoted string containing a colon (e.g., URLs like https://...)
+2. Unquoted Windows path with backslashes (e.g., C:\\path\\to\\file)
+3. Malformed YAML structure
+4. File corruption from previous processing
 
-def download_file(url, path=None, target_filename=None):
+Suggested fixes:
+1. Delete the config file and let it re-download: {full_config_path}
+2. Manually edit the file to quote problematic values
+3. Check if the source config URL provides valid YAML
+"""
+            # Restore backup
+            if os.path.exists(backup_path):
+                try:
+                    shutil.copy2(backup_path, full_config_path)
+                    print(f"Restored config from backup due to parsing error")
+                except Exception as restore_err:
+                    print(f"Warning: Could not restore backup: {restore_err}")
+            
+            raise yaml.YAMLError(error_details) from e
+        
+        # Validate required sections exist
+        if not isinstance(data, dict):
+            raise ValueError(f"Config file does not contain a valid YAML dictionary: {full_config_path}")
+        
+        # Apply modifications safely
+        if 'use_amp' not in data:
+            if 'training' not in data:
+                data['training'] = {}
+            data['training']['use_amp'] = True
+
+        if 'audio' not in data:
+            data['audio'] = {}
+        data['audio']['chunk_size'] = chunk_size
+        
+        if 'inference' not in data:
+            data['inference'] = {}
+        data['inference']['num_overlap'] = overlap
+        if data['inference'].get('batch_size', 1) == 1:
+            data['inference']['batch_size'] = 2
+
+        print(f"Using custom overlap and chunk_size: overlap={overlap}, chunk_size={chunk_size}")
+        
+        # Write updated config
+        with open(full_config_path, 'w', encoding='utf-8') as f:
+            yaml.dump(data, f, default_flow_style=False, sort_keys=False, Dumper=yaml.Dumper)
+        
+        # Remove backup on success
+        if os.path.exists(backup_path):
+            try:
+                os.remove(backup_path)
+            except Exception:
+                pass
+                
+    except Exception as e:
+        # Restore backup on any error
+        if os.path.exists(backup_path):
+            try:
+                shutil.copy2(backup_path, full_config_path)
+                os.remove(backup_path)
+            except Exception:
+                pass
+        raise
+
+
+def redownload_config(model_name):
+    """Re-download a corrupted config file for a custom model.
+    
+    Args:
+        model_name: Name of the custom model
+        
+    Returns:
+        tuple: (success: bool, message: str)
+    """
+    custom_models = load_custom_models()
+    if model_name not in custom_models:
+        return False, f"Model '{model_name}' not found in custom models"
+    
+    config = custom_models[model_name]
+    config_url = config.get('config_url')
+    config_filename = config.get('config_filename')
+    
+    if not config_url or not config_filename:
+        return False, f"Config URL or filename not found for model '{model_name}'"
+    
+    config_path = os.path.join(CHECKPOINT_DIR, config_filename)
+    
+    # Auto-fix URL before re-downloading
+    config_url = fix_huggingface_url(config_url)
+    
+    # Delete existing config
+    if os.path.exists(config_path):
+        try:
+            os.remove(config_path)
+            print(f"Deleted corrupted config: {config_path}")
+        except Exception as e:
+            return False, f"Could not delete config file: {e}"
+    
+    # Re-download with validation
+    try:
+        download_file(config_url, target_filename=config_filename, validate_yaml=True)
+        print(f"Re-downloaded config: {config_filename}")
+        return True, f"Config file re-downloaded successfully: {config_filename}"
+    except Exception as e:
+        return False, f"Failed to re-download config: {e}"
+
+def download_file(url, path=None, target_filename=None, validate_yaml=True):
     """Downloads a file from a URL.
     
     Args:
         url: The URL to download from.
         path: The directory to save the file to. Defaults to CHECKPOINT_DIR.
         target_filename: Optional custom filename to save as. If None, uses filename from URL.
+        validate_yaml: If True and file is .yaml/.yml, validate it's not HTML
     """
     import requests
+    
+    # Auto-fix Hugging Face URLs
+    url = fix_huggingface_url(url)
+    
     encoded_url = quote(url, safe=':/')
     if path is None:
         path = CHECKPOINT_DIR
@@ -194,14 +495,30 @@ def download_file(url, path=None, target_filename=None):
     try:
         response = requests.get(url, stream=True)
         if response.status_code == 200:
-            with open(file_path, 'wb') as f:
-                for chunk in response.iter_content(chunk_size=8192):
-                    f.write(chunk)
+            # For YAML files, download to memory first and validate
+            is_yaml_file = filename.lower().endswith(('.yaml', '.yml'))
+            
+            if is_yaml_file and validate_yaml:
+                content = response.content
+                is_valid, error_msg = validate_yaml_content(content, file_path)
+                if not is_valid:
+                    print(f"ERROR: Downloaded file is not valid YAML!")
+                    print(error_msg)
+                    raise ValueError(f"Downloaded file is HTML, not YAML. URL may be incorrect: {url}")
+                
+                with open(file_path, 'wb') as f:
+                    f.write(content)
+            else:
+                with open(file_path, 'wb') as f:
+                    for chunk in response.iter_content(chunk_size=8192):
+                        f.write(chunk)
+            
             print(f"File '{filename}' downloaded successfully")
         else:
             print(f"Error downloading '{filename}': Status code {response.status_code}")
     except Exception as e:
         print(f"Error downloading file '{filename}' from '{url}': {e}")
+        raise
 
 # Model konfigurasyonlarını kategorize bir sözlükte tut
 MODEL_CONFIGS = {
@@ -1504,7 +1821,7 @@ def get_model_config(clean_model=None, chunk_size=None, overlap=None):
         
         # Apply config edits if needed
         if config.get('needs_conf_edit', True) and chunk_size is not None and overlap is not None:
-            conf_edit(config_path, chunk_size, overlap)
+            conf_edit(config_path, chunk_size, overlap, model_name=clean_model)
         
         return config['model_type'], config_path, checkpoint_path
     
