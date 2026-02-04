@@ -121,17 +121,6 @@ def download_callback(url, download_type='direct', cookie_file=None):
 
     # 3. YouTube and other media links
     else:
-        # Auto-downgrade yt-dlp if version is too new (2025+ has bot detection issues)
-        try:
-            import pkg_resources
-            ytdlp_version = pkg_resources.get_distribution("yt-dlp").version
-            if ytdlp_version >= "2025":
-                print("⚠️ yt-dlp version too new, downgrading to 2024.08.06...")
-                os.system('pip install --upgrade --force-reinstall yt-dlp==2024.08.06 --quiet')
-                print("✅ yt-dlp downgraded successfully. Please restart the application.")
-        except:
-            pass
-        
         # First try: iOS/Android without cookies (best for bot protection bypass)
         ydl_opts_nocookie = {
             'format': 'ba[ext=m4a]/ba[ext=webm]/ba/b',
@@ -147,12 +136,12 @@ def download_callback(url, download_type='direct', cookie_file=None):
             'extractor_retries': 3,
             'extractor_args': {
                 'youtube': {
-                    'player_client': ['android_testsuite', 'ios', 'android'],
+                    'player_client': ['ios', 'android'],
                     'player_skip': ['webpage', 'configs']
                 }
             },
             'http_headers': {
-                'User-Agent': 'com.google.android.youtube/19.09.37 (Linux; U; Android 13) gzip',
+                'User-Agent': 'com.google.ios.youtube/19.09.3 (iPhone14,3; U; CPU iOS 15_6 like Mac OS X)',
                 'Accept-Language': 'en-US,en;q=0.9'
             }
         }
@@ -173,7 +162,7 @@ def download_callback(url, download_type='direct', cookie_file=None):
             'extractor_retries': 3,
             'extractor_args': {
                 'youtube': {
-                    'player_client': ['tv_embedded', 'web'],
+                    'player_client': ['web', 'tv_embedded'],
                     'player_skip': ['configs']
                 }
             }
