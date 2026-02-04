@@ -121,34 +121,106 @@ def download_callback(url, download_type='direct', cookie_file=None):
 
     # 3. YouTube and other media links
     else:
-        ydl_opts = {
-            'format': 'bestaudio/best',
+        # Auto-downgrade yt-dlp if version is too new (2025+ has bot detection issues)
+        try:
+            import pkg_resources
+            ytdlp_version = pkg_resources.get_distribution("yt-dlp").version
+            if ytdlp_version >= "2025":
+                print("⚠️ yt-dlp version too new, downgrading to 2024.08.06...")
+                os.system('pip install --upgrade --force-reinstall yt-dlp==2024.08.06 --quiet')
+                print("✅ yt-dlp downgraded successfully. Please restart the application.")
+        except:
+            pass
+        
+        # First try: iOS/Android without cookies (best for bot protection bypass)
+        ydl_opts_nocookie = {
+            'format': 'ba[ext=m4a]/ba[ext=webm]/ba/b',
             'outtmpl': os.path.join(INPUT_DIR, '%(title)s.%(ext)s'),
             'postprocessors': [{
                 'key': 'FFmpegExtractAudio',
                 'preferredcodec': 'wav',
                 'preferredquality': '0'
             }],
-            'cookiefile': COOKIE_PATH if os.path.exists(COOKIE_PATH) else None,
             'nocheckcertificate': True,
-            'ignoreerrors': True,
-            'retries': 3
+            'ignoreerrors': False,
+            'retries': 3,
+            'extractor_retries': 3,
+            'extractor_args': {
+                'youtube': {
+                    'player_client': ['android_testsuite', 'ios', 'android'],
+                    'player_skip': ['webpage', 'configs']
+                }
+            },
+            'http_headers': {
+                'User-Agent': 'com.google.android.youtube/19.09.37 (Linux; U; Android 13) gzip',
+                'Accept-Language': 'en-US,en;q=0.9'
+            }
         }
+        
+        # Second try: web client with cookies if available
+        ydl_opts_cookie = {
+            'format': 'ba[ext=m4a]/ba[ext=webm]/ba/b',
+            'outtmpl': os.path.join(INPUT_DIR, '%(title)s.%(ext)s'),
+            'postprocessors': [{
+                'key': 'FFmpegExtractAudio',
+                'preferredcodec': 'wav',
+                'preferredquality': '0'
+            }],
+            'cookiefile': COOKIE_PATH,
+            'nocheckcertificate': True,
+            'ignoreerrors': False,
+            'retries': 3,
+            'extractor_retries': 3,
+            'extractor_args': {
+                'youtube': {
+                    'player_client': ['tv_embedded', 'web'],
+                    'player_skip': ['configs']
+                }
+            }
+        }
+        
+        # Try without cookies first
+        info_dict = None
+        temp_path = None
+        
         try:
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            with yt_dlp.YoutubeDL(ydl_opts_nocookie) as ydl:
                 info_dict = ydl.extract_info(url, download=True)
-                temp_path = ydl.prepare_filename(info_dict)
-                base_name = os.path.splitext(os.path.basename(temp_path))[0]
-                sanitized_base_name = sanitize_filename(base_name)
-                wav_path = os.path.join(INPUT_DIR, f"{sanitized_base_name}.wav")
-                temp_wav = os.path.splitext(temp_path)[0] + '.wav'
-                if os.path.exists(temp_wav):
-                    os.rename(temp_wav, wav_path)
-                    download_success = True
-                else:
-                    raise Exception(i18n("wav_conversion_failed"))
+                if info_dict:
+                    temp_path = ydl.prepare_filename(info_dict)
+        except Exception as e:
+            # If no cookies available or first method failed, try with cookies
+            if os.path.exists(COOKIE_PATH):
+                print(f"⚠️ First attempt failed, trying with cookies...")
+                try:
+                    with yt_dlp.YoutubeDL(ydl_opts_cookie) as ydl:
+                        info_dict = ydl.extract_info(url, download=True)
+                        if info_dict:
+                            temp_path = ydl.prepare_filename(info_dict)
+                except Exception as e2:
+                    raise e2
+            else:
+                raise e
+        
+        try:
+            # Check if extraction was successful
+            if info_dict is None:
+                raise Exception(i18n("youtube_extraction_failed") if "youtube_extraction_failed" in dir(i18n) else "YouTube extraction failed. Please try updating yt-dlp: pip install -U yt-dlp")
+            
+            base_name = os.path.splitext(os.path.basename(temp_path))[0]
+            sanitized_base_name = sanitize_filename(base_name)
+            wav_path = os.path.join(INPUT_DIR, f"{sanitized_base_name}.wav")
+            temp_wav = os.path.splitext(temp_path)[0] + '.wav'
+            if os.path.exists(temp_wav):
+                os.rename(temp_wav, wav_path)
+                download_success = True
+            else:
+                raise Exception(i18n("wav_conversion_failed"))
         except Exception as e:
             error_msg = i18n("download_error").format(str(e))
+            # Add hint for yt-dlp update if it's a YouTube issue
+            if 'youtube' in url.lower() or 'youtu.be' in url.lower():
+                error_msg += "\n\n💡 Try: pip install -U yt-dlp"
             print(error_msg)
             return None, error_msg, None, None, None, None
 
