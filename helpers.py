@@ -69,7 +69,6 @@ def extract_model_name_from_checkpoint(checkpoint_path):
         return "Unknown"
     base_name = os.path.basename(checkpoint_path)
     model_name = os.path.splitext(base_name)[0]
-    print(f"Original checkpoint path: {checkpoint_path}, extracted model_name: {model_name}")
     return model_name.strip()
 
 for directory in [BASE_DIR, INPUT_DIR, OUTPUT_DIR, OLD_OUTPUT_DIR, AUTO_ENSEMBLE_TEMP, AUTO_ENSEMBLE_OUTPUT, VIDEO_TEMP, ENSEMBLE_DIR]:
