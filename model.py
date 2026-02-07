@@ -33,7 +33,6 @@ def fix_huggingface_url(url):
     # Check if it's a Hugging Face URL with /blob/
     if 'huggingface.co' in url and '/blob/' in url:
         fixed_url = url.replace('/blob/', '/resolve/')
-        print(f"Auto-converted HuggingFace URL: /blob/ -> /resolve/")
         return fixed_url
     
     return url
@@ -129,8 +128,8 @@ def detect_model_type_from_config(config_url):
                 return config_data['model_type']
             if 'model' in config_data and 'model_type' in config_data['model']:
                 return config_data['model']['model_type']
-    except Exception as e:
-        print(f"Could not detect model type from config: {e}")
+    except Exception:
+        pass
     return None
 
 def load_custom_models():
@@ -140,8 +139,7 @@ def load_custom_models():
     try:
         with open(CUSTOM_MODELS_FILE, 'r', encoding='utf-8') as f:
             return json.load(f)
-    except (json.JSONDecodeError, IOError) as e:
-        print(f"Error loading custom models: {e}")
+    except (json.JSONDecodeError, IOError):
         return {}
 
 def save_custom_models(models):
@@ -176,7 +174,6 @@ def add_custom_model(model_name, model_type, checkpoint_url, config_url, custom_
             detected_type = detect_model_type_from_config(config_url)
         if detected_type:
             model_type = detected_type
-            print(f"Auto-detected model type: {model_type}")
         else:
             return False, "Could not auto-detect model type. Please select manually."
     
@@ -217,8 +214,8 @@ def delete_custom_model(model_name):
             os.remove(checkpoint_path)
         if os.path.exists(config_path):
             os.remove(config_path)
-    except Exception as e:
-        print(f"Warning: Could not delete model files: {e}")
+    except Exception:
+        pass
     
     del models[model_name]
     save_custom_models(models)
@@ -311,8 +308,8 @@ def conf_edit(config_path, chunk_size, overlap, model_name=None):
     backup_path = full_config_path + '.backup'
     try:
         shutil.copy2(full_config_path, backup_path)
-    except Exception as e:
-        print(f"Warning: Could not create backup: {e}")
+    except Exception:
+        pass
     
     try:
         # Read and pre-process content
@@ -331,7 +328,6 @@ def conf_edit(config_path, chunk_size, overlap, model_name=None):
         
         # Write pre-processed content if changed
         if content != original_content:
-            print("Fixed YAML formatting issues in config file")
             with open(full_config_path, 'w', encoding='utf-8') as f:
                 f.write(content)
         
@@ -377,9 +373,8 @@ Suggested fixes:
             if os.path.exists(backup_path):
                 try:
                     shutil.copy2(backup_path, full_config_path)
-                    print(f"Restored config from backup due to parsing error")
-                except Exception as restore_err:
-                    print(f"Warning: Could not restore backup: {restore_err}")
+                except Exception:
+                    pass
             
             raise yaml.YAMLError(error_details) from e
         
@@ -402,8 +397,6 @@ Suggested fixes:
         data['inference']['num_overlap'] = overlap
         if data['inference'].get('batch_size', 1) == 1:
             data['inference']['batch_size'] = 2
-
-        print(f"Using custom overlap and chunk_size: overlap={overlap}, chunk_size={chunk_size}")
         
         # Write updated config
         with open(full_config_path, 'w', encoding='utf-8') as f:
@@ -456,14 +449,12 @@ def redownload_config(model_name):
     if os.path.exists(config_path):
         try:
             os.remove(config_path)
-            print(f"Deleted corrupted config: {config_path}")
         except Exception as e:
             return False, f"Could not delete config file: {e}"
     
     # Re-download with validation
     try:
         download_file(config_url, target_filename=config_filename, validate_yaml=True)
-        print(f"Re-downloaded config: {config_filename}")
         return True, f"Config file re-downloaded successfully: {config_filename}"
     except Exception as e:
         return False, f"Failed to re-download config: {e}"
@@ -531,8 +522,6 @@ def download_file(url, path=None, target_filename=None, validate_yaml=True):
                                 print(f"[SESA_DOWNLOAD]{filename}:{percent}", flush=True)
                 
                 print(f"[SESA_DOWNLOAD]END:{filename}", flush=True)
-            
-            print(f"File '{filename}' downloaded successfully")
         else:
             print(f"Error downloading '{filename}': Status code {response.status_code}")
     except Exception as e:
