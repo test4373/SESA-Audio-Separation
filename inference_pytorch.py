@@ -116,12 +116,7 @@ def demix_pytorch_optimized(
             batch_data = []
             batch_locations = []
             
-            progress_bar = tqdm(
-                total=mix.shape[1], 
-                desc="Processing with optimized PyTorch", 
-                leave=False
-            ) if pbar else None
-            
+            # Progress reporting for GUI (no terminal tqdm)
             total_samples = mix.shape[1]
             last_reported_percent = -1
             
@@ -166,18 +161,13 @@ def demix_pytorch_optimized(
                     batch_data.clear()
                     batch_locations.clear()
                 
-                if progress_bar:
-                    progress_bar.update(step)
-                
-                # Report real progress percentage for GUI capture
+                # Report real progress percentage for GUI capture (every 1% for smooth updates)
                 current_percent = int((i / total_samples) * 100)
-                if current_percent > last_reported_percent and current_percent % 5 == 0:
+                if current_percent > last_reported_percent:
                     last_reported_percent = current_percent
-                    print(f"Progress: {current_percent:.1f}%", flush=True)
+                    print(f"Progress: {current_percent}%", flush=True)
             
-            if progress_bar:
-                progress_bar.close()
-            print("Progress: 100.0%", flush=True)
+            print("Progress: 100%", flush=True)
             
             # Compute final estimated sources
             estimated_sources = result / counter
@@ -215,13 +205,12 @@ def run_folder_pytorch_optimized(backend, args, config, device, verbose: bool = 
     store_dir = args.store_dir
     os.makedirs(store_dir, exist_ok=True)
     
-    if not verbose:
-        mixture_paths = tqdm(mixture_paths, desc=i18n("total_progress"))
-    
+    # Progress is reported via print statements for GUI capture (no terminal tqdm)
+    total_files = len(mixture_paths)
     detailed_pbar = not args.disable_detailed_pbar
     print(i18n("detailed_pbar_enabled").format(detailed_pbar))
     
-    for path in mixture_paths:
+    for file_idx, path in enumerate(mixture_paths):
         try:
             mix, sr = librosa.load(path, sr=sample_rate, mono=False)
             print(i18n("loaded_audio").format(path, mix.shape))
