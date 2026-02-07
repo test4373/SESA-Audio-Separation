@@ -192,6 +192,7 @@ def run_command_and_process_files(
 ):
     """
     Run inference.py with specified parameters and process output files.
+    This is a generator function that yields progress updates for real-time UI feedback.
     """
     try:
         # Create directories and check Google Drive access
@@ -223,9 +224,10 @@ def run_command_and_process_files(
             apollo_chunk_size = 19
             apollo_overlap = 2
 
+        # Initial progress yield
+        yield {"progress": 0, "status": "Starting audio separation...", "outputs": None}
 
-
-                        # Always use optimized PyTorch backend
+        # Always use optimized PyTorch backend
         python_exe = "python"
         
         if PYTORCH_OPTIMIZED_AVAILABLE:
@@ -286,25 +288,56 @@ def run_command_and_process_files(
 
         print(f"Running command: {' '.join(cmd_parts)}")
         
-        process = subprocess.run(
+        # Use subprocess.Popen for real-time progress capture
+        process = subprocess.Popen(
             cmd_parts,
             cwd=BASE_DIR,
-            capture_output=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             text=True,
-            check=True,
-            timeout=3600  # 1 hour timeout
+            bufsize=1,
+            universal_newlines=True
         )
 
-        # Log subprocess output
-        print(f"Subprocess stdout: {process.stdout}")
-        if process.stderr:
-            print(f"Subprocess stderr: {process.stderr}")
-
-        # Progress update (separation phase, 0-80%)
-        if progress is not None and callable(getattr(progress, '__call__', None)):
-            progress(0, desc="Starting audio separation", total=100)
-        else:
-            print("Progress is not callable or None, skipping progress update")
+        stderr_output = ""
+        last_yield_percent = -1
+        
+        # Read stdout line-by-line for real-time progress updates
+        for line in process.stdout:
+            line_stripped = line.strip()
+            
+            # Check for [SESA_PROGRESS] prefix from inference script
+            if line_stripped.startswith("[SESA_PROGRESS]"):
+                try:
+                    percentage_str = line_stripped.replace("[SESA_PROGRESS]", "").strip()
+                    percentage = float(percentage_str) if percentage_str else 0
+                    percentage = min(max(percentage, 0), 100)
+                    
+                    # Scale progress to 0-80% range (saving 80-100% for Apollo)
+                    scaled_progress = int(percentage * 0.8)
+                    
+                    # Yield on every percent change for smooth updates
+                    if int(percentage) != last_yield_percent:
+                        last_yield_percent = int(percentage)
+                        yield {"progress": scaled_progress, "status": f"Separating audio... {int(percentage)}%", "outputs": None}
+                except (ValueError, TypeError):
+                    pass
+            else:
+                # Print non-progress lines for logging
+                if line_stripped:
+                    print(line_stripped)
+        
+        # Capture stderr
+        for line in process.stderr:
+            stderr_output += line
+            print(f"Stderr: {line.strip()}")
+        
+        process.wait()
+        
+        if process.returncode != 0:
+            raise subprocess.CalledProcessError(process.returncode, cmd_parts, stderr=stderr_output)
+        
+        yield {"progress": 80, "status": "Separation complete, processing outputs...", "outputs": None}
 
         # Check if output files were created
         filename_model = extract_model_name_from_checkpoint(start_check_point)
@@ -373,6 +406,7 @@ def run_command_and_process_files(
 
         # Apollo processing
         if use_apollo:
+            yield {"progress": 80, "status": "Enhancing with Apollo...", "outputs": None}
             normalized_outputs = process_with_apollo(
                 output_files=normalized_outputs,
                 output_dir=OUTPUT_DIR,
@@ -387,19 +421,17 @@ def run_command_and_process_files(
                 total_progress_end=100
             )
 
-        # Final progress update
-        if progress is not None and callable(getattr(progress, '__call__', None)):
-            progress(100, desc="Separation complete")
-        return tuple(normalized_outputs)
+        # Final yield with outputs
+        yield {"progress": 100, "status": "Separation complete", "outputs": tuple(normalized_outputs)}
 
     except subprocess.CalledProcessError as e:
         print(f"Subprocess failed, code: {e.returncode}: {e.stderr}")
-        return (None,) * 14
+        yield {"progress": 0, "status": f"Error: {e.stderr}", "outputs": (None,) * 14}
     except Exception as e:
         print(f"run_command_and_process_files error: {str(e)}")
         import traceback
         traceback.print_exc()
-        return (None,) * 14
+        yield {"progress": 0, "status": f"Error: {str(e)}", "outputs": (None,) * 14}
 
 
 
@@ -453,6 +485,10 @@ def process_audio(
     *args,
     **kwargs
 ):
+    """
+    Process audio with the selected model. This is a generator function that yields
+    progress updates for real-time UI feedback.
+    """
     try:
         # Check Google Drive connection
         setup_directories()
@@ -460,11 +496,12 @@ def process_audio(
         if input_audio_file is not None:
             audio_path = input_audio_file.name if hasattr(input_audio_file, 'name') else input_audio_file
         else:
-            return (
+            yield (
                 None, None, None, None, None, None, None, None, None, None, None, None, None, None,
                 "No audio file provided",
                 update_progress_html("No input provided", 0)
             )
+            return
 
         os.makedirs(OUTPUT_DIR, exist_ok=True)
         os.makedirs(OLD_OUTPUT_DIR, exist_ok=True)
@@ -525,7 +562,9 @@ def process_audio(
         model_type, config_path, start_check_point = get_model_config(clean_model_name, inference_chunk_size, inference_overlap)
         print(f"Model configuration: model_type={model_type}, config_path={config_path}, start_check_point={start_check_point}")
 
-        outputs = run_command_and_process_files(
+        # Iterate over the generator and yield progress updates
+        outputs = None
+        for update in run_command_and_process_files(
             model_type=model_type,
             config_path=config_path,
             start_check_point=start_check_point,
@@ -548,16 +587,27 @@ def process_audio(
             enable_amp=enable_amp,
             enable_tf32=enable_tf32,
             enable_cudnn_benchmark=enable_cudnn_benchmark
-        )
+        ):
+            if update.get("outputs") is not None:
+                outputs = update["outputs"]
+            # Yield progress update to Gradio
+            yield (
+                None, None, None, None, None, None, None, None, None, None, None, None, None, None,
+                update["status"],
+                update_progress_html(update["status"], update["progress"])
+            )
 
         if outputs is None or all(output is None for output in outputs):
             raise ValueError("run_command_and_process_files returned None or all None outputs")
 
         # Apply Matchering (if enabled)
         if use_matchering:
-            # Progress update for Matchering
-            if progress is not None and callable(getattr(progress, '__call__', None)):
-                progress(90, desc="Applying Matchering")
+            # Yield progress update for Matchering
+            yield (
+                None, None, None, None, None, None, None, None, None, None, None, None, None, None,
+                "Applying Matchering...",
+                update_progress_html("Applying Matchering...", 90)
+            )
 
             # Find clean segment from original audio
             segment_start, segment_end, segment_audio = find_clear_segment(audio_path)
@@ -587,10 +637,8 @@ def process_audio(
 
             outputs = tuple(mastered_outputs)
 
-        if progress is not None and callable(getattr(progress, '__call__', None)):
-            progress(100, desc="Processing complete")
-
-        return (
+        # Final yield with all outputs
+        yield (
             outputs[0], outputs[1], outputs[2], outputs[3], outputs[4], outputs[5], outputs[6],
             outputs[7], outputs[8], outputs[9], outputs[10], outputs[11], outputs[12], outputs[13],
             "Audio processing completed",
@@ -601,7 +649,7 @@ def process_audio(
         print(f"process_audio error: {str(e)}")
         import traceback
         traceback.print_exc()
-        return (
+        yield (
             None, None, None, None, None, None, None, None, None, None, None, None, None, None,
             f"Error occurred: {str(e)}",
             update_progress_html("Error occurred", 0)
@@ -652,10 +700,20 @@ def ensemble_audio_fn(files, method, weights, progress=gr.Progress()):
             stdout_output += line
             line_stripped = line.strip()
             
-            # Capture real progress percentage from ensemble.py
-            if line_stripped.startswith("Progress:"):
+            # Capture real progress percentage from ensemble.py with new format
+            if line_stripped.startswith("[SESA_PROGRESS]"):
+                try:
+                    percent_str = line_stripped.replace("[SESA_PROGRESS]", "").strip()
+                    percent = int(float(percent_str)) if percent_str else 0
+                    percent = min(max(percent, 0), 100)
+                    progress(percent, desc=f"Ensemble progress: {percent}%")
+                except (ValueError, TypeError):
+                    pass
+            # Legacy format support
+            elif line_stripped.startswith("Progress:"):
                 try:
                     percent = int(line_stripped.split(":")[1].strip().replace("%", ""))
+                    percent = min(max(percent, 0), 100)
                     progress(percent, desc=f"Ensemble progress: {percent}%")
                 except (ValueError, IndexError):
                     pass
@@ -668,7 +726,7 @@ def ensemble_audio_fn(files, method, weights, progress=gr.Progress()):
             elif "saving" in line.lower():
                 print(f"Ensemble: {line_stripped}")
                 progress(95, desc="Saving ensemble output...")
-            elif line_stripped and not line_stripped.startswith("Progress:"):
+            elif line_stripped and not line_stripped.startswith("[SESA_PROGRESS]") and not line_stripped.startswith("Progress:"):
                 # Only print non-progress messages
                 print(f"Ensemble: {line_stripped}")
         
@@ -798,29 +856,80 @@ def auto_ensemble_process(
 
             stderr_output = ""
             last_yield_percent = -1
+            downloading_file = None
+            
             for line in process.stdout:
                 line_stripped = line.strip()
-                # Only print non-progress lines to reduce terminal noise
-                if not line_stripped.startswith("Progress:"):
-                    print(line_stripped)
-                if "Progress:" in line:
+                
+                # Check for download progress [SESA_DOWNLOAD]
+                if line_stripped.startswith("[SESA_DOWNLOAD]"):
                     try:
-                        # Match both integer and decimal percentages
-                        match = re.search(r"Progress:\s*(\d+(?:\.\d+)?)%", line)
+                        download_info = line_stripped.replace("[SESA_DOWNLOAD]", "")
+                        if download_info.startswith("START:"):
+                            downloading_file = download_info.replace("START:", "")
+                            yield None, f"Downloading: {downloading_file}", update_progress_html(
+                                f"Downloading model file: {downloading_file}",
+                                i * model_progress_per_step
+                            )
+                        elif download_info.startswith("END:"):
+                            downloading_file = None
+                        elif ":" in download_info:
+                            parts = download_info.rsplit(":", 1)
+                            if len(parts) == 2:
+                                filename, percent_str = parts
+                                download_percent = int(percent_str)
+                                yield None, f"Downloading {filename}: {download_percent}%", update_progress_html(
+                                    f"Downloading: {filename} - {download_percent}%",
+                                    i * model_progress_per_step
+                                )
+                    except (ValueError, TypeError):
+                        pass
+                # Check for unique progress prefix [SESA_PROGRESS]
+                elif line_stripped.startswith("[SESA_PROGRESS]"):
+                    try:
+                        # Extract percentage from [SESA_PROGRESS]XX format
+                        percentage_str = line_stripped.replace("[SESA_PROGRESS]", "").strip()
+                        percentage = float(percentage_str) if percentage_str else 0
+                        percentage = min(max(percentage, 0), 100)  # Clamp to 0-100
+                        
+                        model_percentage = (percentage / 100) * model_progress_per_step
+                        current_progress = (i * model_progress_per_step) + model_percentage
+                        current_progress = clamp_percentage(current_progress)
+                        
+                        # Yield on every percent change for smooth updates
+                        if int(percentage) != last_yield_percent:
+                            last_yield_percent = int(percentage)
+                            yield None, i18n("loading_model_progress_label").format(i+1, total_models, clean_model_name, int(percentage)), update_progress_html(
+                                f"Model {i+1}/{total_models}: {clean_model_name} - {int(percentage)}%",
+                                current_progress
+                            )
+                    except (ValueError, TypeError):
+                        # Silently ignore parsing errors for progress lines
+                        pass
+                # Also support legacy "Progress: XX%" format for backwards compatibility
+                elif line_stripped.startswith("Progress:"):
+                    try:
+                        match = re.search(r"Progress:\s*(\d+(?:\.\d+)?)%?", line_stripped)
                         if match:
                             percentage = float(match.group(1))
+                            percentage = min(max(percentage, 0), 100)
+                            
                             model_percentage = (percentage / 100) * model_progress_per_step
                             current_progress = (i * model_progress_per_step) + model_percentage
                             current_progress = clamp_percentage(current_progress)
-                            # Yield on every percent change for smooth updates
+                            
                             if int(percentage) != last_yield_percent:
                                 last_yield_percent = int(percentage)
                                 yield None, i18n("loading_model_progress_label").format(i+1, total_models, clean_model_name, int(percentage)), update_progress_html(
                                     f"Model {i+1}/{total_models}: {clean_model_name} - {int(percentage)}%",
                                     current_progress
                                 )
-                    except (AttributeError, ValueError) as e:
-                        print(f"Progress parsing error: {e}")
+                    except (ValueError, TypeError):
+                        pass
+                else:
+                    # Print non-progress lines
+                    if line_stripped:
+                        print(line_stripped)
 
             for line in process.stderr:
                 stderr_output += line
