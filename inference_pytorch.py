@@ -162,12 +162,13 @@ def demix_pytorch_optimized(
                     batch_locations.clear()
                 
                 # Report real progress percentage for GUI capture (every 1% for smooth updates)
+                # Use unique prefix [SESA_PROGRESS] to avoid confusion with other log messages
                 current_percent = int((i / total_samples) * 100)
                 if current_percent > last_reported_percent:
                     last_reported_percent = current_percent
-                    print(f"Progress: {current_percent}%", flush=True)
+                    print(f"[SESA_PROGRESS]{current_percent}", flush=True)
             
-            print("Progress: 100%", flush=True)
+            print("[SESA_PROGRESS]100", flush=True)
             
             # Compute final estimated sources
             estimated_sources = result / counter
