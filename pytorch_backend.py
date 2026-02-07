@@ -11,6 +11,10 @@ import warnings
 import hashlib
 import time
 
+# Suppress channels_last warnings for 3D audio tensors
+warnings.filterwarnings("ignore", message=".*channels_last.*")
+warnings.filterwarnings("ignore", message=".*rank 3.*")
+
 
 class PyTorchBackend:
     """
@@ -109,9 +113,16 @@ class PyTorchBackend:
             param.requires_grad = False
         
         # Apply memory format optimization (default: channels_last for CUDA)
+        # Note: Audio models use 3D tensors, so channels_last is applied only where beneficial
         if use_channels_last and self.device.startswith('cuda'):
-            print("  ✅ Applying channels-last memory format (FASTER)")
-            self.model = self.model.to(memory_format=torch.channels_last)
+            print("  ✅ Using channels-last optimization (RECOMMENDED)")
+            # Only apply to model if it has 4D conv layers, otherwise skip silently
+            try:
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore")
+                    self.model = self.model.to(memory_format=torch.channels_last)
+            except Exception:
+                pass  # Silently skip for models that don't support channels_last
         
         # Set model to inference mode
         torch.set_grad_enabled(False)
@@ -124,7 +135,6 @@ class PyTorchBackend:
                 raise ValueError("example_input required for JIT optimization")
             self.compiled_model = self._jit_trace_model(self.model, example_input)
         elif self.optimize_mode == 'channels_last':
-            print("  ✅ Using channels-last optimization (RECOMMENDED)")
             self.compiled_model = self.model
         else:
             print("  ✅ Using default optimization")
@@ -248,6 +258,35 @@ class PyTorchBackend:
             
             print(f"✓ Model loaded from: {load_path}")
             return self.compiled_model
+        except (pickle.UnpicklingError, RuntimeError, EOFError) as e:
+            error_details = f"""
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                         CHECKPOINT FILE CORRUPTED                            ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+⚠️  Error: {str(e)}
+
+❌ The checkpoint file appears to be corrupted or was not downloaded correctly.
+   File: {load_path}
+
+Common causes:
+  • File is an HTML page (wrong download URL, e.g., HuggingFace /blob/ instead of /resolve/)
+  • Incomplete or interrupted download
+  • Network issues during download
+  • File system corruption
+
+🔧 Solution:
+  1. Delete the corrupted checkpoint file:
+     {load_path}
+  
+  2. Re-run the application - it will automatically re-download the model
+  
+  3. If the problem persists, check that your model URL uses /resolve/ not /blob/
+     Example: https://huggingface.co/user/repo/resolve/main/model.ckpt
+
+"""
+            print(error_details)
+            raise
         except Exception as e:
             print(f"✗ Failed to load model: {e}")
             raise
@@ -269,13 +308,10 @@ class PyTorchBackend:
         if self.compiled_model is None:
             raise RuntimeError("No model has been optimized yet")
         
-        # Apply memory format if needed
-        if self.optimize_mode == 'channels_last':
-            if x.dim() == 4:
-                x = x.to(memory_format=torch.channels_last)
-            else:
-                # Handle cases where tensor is not rank 4, e.g., print a warning or reshape
-                print(f"Warning: Tensor has rank {x.dim()}, skipping channels_last format.")
+        # Apply memory format if needed (only for 4D tensors - images)
+        # Audio models typically use 3D tensors, so we silently skip channels_last for them
+        if self.optimize_mode == 'channels_last' and x.dim() == 4:
+            x = x.to(memory_format=torch.channels_last)
         
         # Run inference with AMP if enabled
         try:
