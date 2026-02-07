@@ -195,10 +195,7 @@ def run_folder_pytorch_optimized(backend, args, config, device, verbose: bool = 
     mixture_paths = sorted(glob.glob(os.path.join(args.input_folder, '*.*')))
     sample_rate = getattr(config.audio, 'sample_rate', 44100)
     
-    print(i18n("total_files_found").format(len(mixture_paths), sample_rate))
-    print(f"\n🔥🔥🔥 ULTRA-OPTIMIZED PyTorch Backend Active 🔥🔥🔥")
-    print(f"🚀 Mode: {args.optimize_mode} | ⚡ AMP: ON | 🎯 TF32: ON | ⚙️ cuDNN: ON")
-    print(f"Expect MAXIMUM SPEED! 💨\n")
+    print(f"🔥 PyTorch Backend | {len(mixture_paths)} dosya | SR: {sample_rate}")
     
     instruments = prefer_target_instrument(config)[:]
     
@@ -303,8 +300,6 @@ def proc_folder_pytorch_optimized(args):
     model, config = get_model_from_config(args.model_type, args.config_path)
     
     if args.start_check_point != '':
-        # Load checkpoint
-        print(f'Loading checkpoint: {args.start_check_point}')
         try:
             checkpoint = torch.load(args.start_check_point, map_location=device, weights_only=False)
         except (pickle.UnpicklingError, RuntimeError, EOFError) as e:
@@ -353,20 +348,10 @@ Common causes:
         
         model.load_state_dict(state_dict, strict=False)
         model = model.eval().to(device)
-        print('✓ Checkpoint loaded successfully')
     
     print(i18n("instruments_print").format(config.training.instruments))
     
-    # Create ULTRA-OPTIMIZED PyTorch backend
-    print(f"\n{'='*70}")
-    print(f"🔥 CREATING ULTRA-OPTIMIZED PyTorch BACKEND")
-    print(f"{'='*70}")
-    print(f"🚀 Optimization Mode: {args.optimize_mode.upper()}")
-    print(f"⚡ Mixed Precision (AMP): {args.enable_amp}")
-    print(f"🎯 TF32 Acceleration: {args.enable_tf32}")
-    print(f"⚙️ cuDNN Benchmark: {args.enable_cudnn_benchmark}")
-    print(f"{'='*70}\n")
-    
+    # Create optimized PyTorch backend
     backend = create_inference_session(
         model=model,
         device=device,
