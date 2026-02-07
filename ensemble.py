@@ -307,10 +307,15 @@ class AudioEnsembleEngine:
                 
                 # Prepare output
                 self.log_message(f"Opening output file for writing: {output_path}")
+                print("Loading audio files...", flush=True)
                 with sf.SoundFile(output_path, 'w', target_sr, 2, 'PCM_24') as outfile:
                     # Process in chunks with progress bar
                     progress = tqdm(total=shortest_frames, unit='samples', desc='Processing')
                     processed_frames = 0
+                    total_chunks = (shortest_frames + buffer_size - 1) // buffer_size
+                    chunk_count = 0
+                    last_reported_percent = -1
+                    print("Processing ensemble...", flush=True)
                     
                     for pos in range(0, shortest_frames, buffer_size):
                         chunk_size = min(buffer_size, shortest_frames - pos)
@@ -370,11 +375,20 @@ class AudioEnsembleEngine:
                         
                         # Clean up and update progress
                         del chunks, result
+                        chunk_count += 1
+                        
+                        # Report real progress percentage
+                        current_percent = int((chunk_count / total_chunks) * 100)
+                        if current_percent > last_reported_percent:
+                            last_reported_percent = current_percent
+                            print(f"Progress: {current_percent}%", flush=True)
+                        
                         if pos % (5 * buffer_size) == 0:
                             gc.collect()
                         
                         progress.update(chunk_size)
                     
+                    print("Saving ensemble output...", flush=True)
                     progress.close()
                 
                 self.log_message(f"Successfully created output: {output_path}")
