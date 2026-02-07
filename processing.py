@@ -622,23 +622,48 @@ def ensemble_audio_fn(files, method, weights, progress=gr.Progress()):
             ensemble_args += ["--weights", *weights_list]
         
         progress(0, desc="Starting ensemble process", total=100)
-        result = subprocess.run(
+        
+        # Run ensemble subprocess with real-time output capture
+        process = subprocess.Popen(
             ["python", "ensemble.py"] + ensemble_args,
-            capture_output=True,
-            text=True
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            bufsize=1,
+            universal_newlines=True
         )
         
-        start_time = time.time()
-        total_estimated_time = 10.0  # Adjust based on actual ensemble duration
-        elapsed_time = 0
-        while elapsed_time < total_estimated_time:
-            elapsed_time = time.time() - start_time
-            progress_value = (elapsed_time / total_estimated_time) * 100
-            progress_value = clamp_percentage(progress_value)
-            progress(progress_value, desc=f"Ensembling progress: {progress_value}%")
-            time.sleep(0.1)
+        stdout_output = ""
+        stderr_output = ""
         
-        progress(100, desc="Finalizing ensemble output")
+        # Read output in real-time and capture actual progress
+        for line in process.stdout:
+            stdout_output += line
+            line_stripped = line.strip()
+            print(f"Ensemble: {line_stripped}")
+            
+            # Capture real progress percentage from ensemble.py
+            if line_stripped.startswith("Progress:"):
+                try:
+                    percent = int(line_stripped.split(":")[1].strip().replace("%", ""))
+                    progress(percent, desc=f"Ensemble progress: {percent}%")
+                except (ValueError, IndexError):
+                    pass
+            elif "loading" in line.lower():
+                progress(5, desc="Loading audio files for ensemble...")
+            elif "processing ensemble" in line.lower():
+                progress(10, desc="Starting ensemble processing...")
+            elif "saving" in line.lower():
+                progress(95, desc="Saving ensemble output...")
+        
+        for line in process.stderr:
+            stderr_output += line
+            print(f"Ensemble stderr: {line.strip()}")
+        
+        process.wait()
+        result = type('Result', (), {'stdout': stdout_output, 'stderr': stderr_output, 'returncode': process.returncode})()
+        
+        progress(100, desc="Ensemble complete")
         log = f"Success: {result.stdout}" if not result.stderr else f"Error: {result.stderr}"
         return output_path, log
 
@@ -760,14 +785,17 @@ def auto_ensemble_process(
                 print(line.strip())
                 if "Progress:" in line:
                     try:
-                        percentage = float(re.search(r"Progress: (\d+\.\d+)%", line).group(1))
-                        model_percentage = (percentage / 100) * model_progress_per_step
-                        current_progress = (i * model_progress_per_step) + model_percentage
-                        current_progress = clamp_percentage(current_progress)
-                        yield None, i18n("loading_model").format(i+1, total_models, clean_model_name), update_progress_html(
-                            i18n("loading_model_progress").format(i+1, total_models, clean_model_name, current_progress),
-                            current_progress
-                        )
+                        # Match both integer and decimal percentages
+                        match = re.search(r"Progress:\s*(\d+(?:\.\d+)?)%", line)
+                        if match:
+                            percentage = float(match.group(1))
+                            model_percentage = (percentage / 100) * model_progress_per_step
+                            current_progress = (i * model_progress_per_step) + model_percentage
+                            current_progress = clamp_percentage(current_progress)
+                            yield None, i18n("loading_model_progress_label").format(i+1, total_models, clean_model_name, int(percentage)), update_progress_html(
+                                i18n("loading_model_progress").format(i+1, total_models, clean_model_name, current_progress),
+                                current_progress
+                            )
                     except (AttributeError, ValueError) as e:
                         print(f"Progress parsing error: {e}")
 
