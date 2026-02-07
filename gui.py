@@ -1318,6 +1318,7 @@ def create_interface():
                 )
 
         def save_settings_on_process(*args):
+            """Generator function that forwards progress yields from process_audio."""
             apollo_method_value = args[15]
             backend_apollo_method = "mid_side_method" if apollo_method_value == i18n("mid_side_method") else "normal_method"
             cleaned_model = clean_model(args[1]) if args[1] else None
@@ -1348,20 +1349,21 @@ def create_interface():
             modified_args = list(args)
             modified_args[1] = cleaned_model
             modified_args[21] = cleaned_model
-            return process_audio(*modified_args)
+            # Forward all yields from process_audio for real-time progress updates
+            for update in process_audio(*modified_args):
+                yield update
 
         def save_auto_ensemble_settings(*args):
+            """Generator function that forwards progress yields from auto_ensemble_process."""
             settings = load_config()["settings"]
             settings["auto_ensemble_type"] = args[7]
             settings["use_matchering"] = args[14]
             settings["matchering_passes"] = args[15]
             save_config(load_config()["favorites"], settings, load_config()["presets"])
-            # Handle generator output from auto_ensemble_process
-            output_audio, status, progress_html = None, i18n("waiting_for_processing"), ensemble_progress_html.value
+            # Forward all yields from auto_ensemble_process for real-time progress updates
             for update in auto_ensemble_process(*args):
                 if isinstance(update, tuple) and len(update) == 3:
-                    output_audio, status, progress_html = update
-            return output_audio, status, progress_html
+                    yield update
 
         def update_category_dropdowns(cat):
             logging.debug(f"Input category: {cat}")
@@ -1424,8 +1426,13 @@ def create_interface():
                 print(f"UI Input - {name}: {value}")
             return args
 
+        def process_with_debug(*args):
+            """Generator wrapper that forwards yields from save_settings_on_process."""
+            for update in save_settings_on_process(*debug_inputs(*args)):
+                yield update
+
         process_btn.click(
-            fn=lambda *args: save_settings_on_process(*debug_inputs(*args)),
+            fn=process_with_debug,
             inputs=[
                 input_audio_file, model_dropdown, chunk_size, overlap, export_format,
                 optimize_mode, enable_amp, enable_tf32, enable_cudnn_benchmark,
