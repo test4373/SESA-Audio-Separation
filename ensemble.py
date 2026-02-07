@@ -376,11 +376,11 @@ class AudioEnsembleEngine:
                         del chunks, result
                         chunk_count += 1
                         
-                        # Report real progress percentage
+                        # Report real progress percentage with unique prefix
                         current_percent = int((chunk_count / total_chunks) * 100)
                         if current_percent > last_reported_percent:
                             last_reported_percent = current_percent
-                            print(f"Progress: {current_percent}%", flush=True)
+                            print(f"[SESA_PROGRESS]{current_percent}", flush=True)
                         
                         if pos % (5 * buffer_size) == 0:
                             gc.collect()
