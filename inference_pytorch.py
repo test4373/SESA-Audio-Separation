@@ -12,6 +12,7 @@ import torch
 import soundfile as sf
 import torch.nn as nn
 import numpy as np
+import pickle
 from assets.i18n.i18n import I18nAuto
 
 # Set inference path for compatibility
@@ -278,6 +279,7 @@ def proc_folder_pytorch_optimized(args):
     parser.add_argument("--enable_amp", action='store_true', help="Enable automatic mixed precision (2x faster)")
     parser.add_argument("--enable_tf32", action='store_true', help="Enable TF32 for RTX 30xx+ (faster)")
     parser.add_argument("--enable_cudnn_benchmark", action='store_true', help="Enable cuDNN benchmark (faster after warmup)")
+    parser.add_argument("--lora_checkpoint", type=str, default='', help="Initial checkpoint to LoRA weights")
     
     if args is None:
         args = parser.parse_args()
@@ -303,7 +305,38 @@ def proc_folder_pytorch_optimized(args):
     if args.start_check_point != '':
         # Load checkpoint
         print(f'Loading checkpoint: {args.start_check_point}')
-        checkpoint = torch.load(args.start_check_point, map_location=device, weights_only=False)
+        try:
+            checkpoint = torch.load(args.start_check_point, map_location=device, weights_only=False)
+        except (pickle.UnpicklingError, RuntimeError, EOFError) as e:
+            error_details = f"""
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                         CHECKPOINT FILE CORRUPTED                            ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+⚠️  Error: {str(e)}
+
+❌ The checkpoint file appears to be corrupted or was not downloaded correctly.
+   File: {args.start_check_point}
+
+Common causes:
+  • File is an HTML page (wrong download URL, e.g., HuggingFace /blob/ instead of /resolve/)
+  • Incomplete or interrupted download
+  • Network issues during download
+  • File system corruption
+
+🔧 Solution:
+  1. Delete the corrupted checkpoint file:
+     {args.start_check_point}
+  
+  2. Re-run the application - it will automatically re-download the model
+  
+  3. If the problem persists, check that your model URL uses /resolve/ not /blob/
+     Example: https://huggingface.co/user/repo/resolve/main/model.ckpt
+
+"""
+            print(error_details)
+            import sys
+            sys.exit(1)
         
         # Handle different checkpoint formats
         if isinstance(checkpoint, dict):
