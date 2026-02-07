@@ -166,10 +166,18 @@ def create_interface():
     }
     #progress-bar {
         height: 20px;
-        background: linear-gradient(to right, #6e8efb, #ff4040);
+        background: linear-gradient(90deg, #6e8efb, #a855f7, #ff4040);
+        background-size: 200% 100%;
         border-radius: 5px;
-        transition: width 0.5s ease-in-out;
+        transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
         max-width: 100% !important;
+    }
+    @keyframes progress-shimmer {
+        0% { background-position: 200% 0; }
+        100% { background-position: -200% 0; }
+    }
+    #progress-bar[data-active="true"] {
+        animation: progress-shimmer 2s linear infinite;
     }
     .gr-accordion {
         background: rgba(128, 0, 0, 0.5) !important;
