@@ -309,8 +309,7 @@ class AudioEnsembleEngine:
                 self.log_message(f"Opening output file for writing: {output_path}")
                 print("Loading audio files...", flush=True)
                 with sf.SoundFile(output_path, 'w', target_sr, 2, 'PCM_24') as outfile:
-                    # Process in chunks with progress bar
-                    progress = tqdm(total=shortest_frames, unit='samples', desc='Processing')
+                    # Process in chunks (progress via print for GUI capture)
                     processed_frames = 0
                     total_chunks = (shortest_frames + buffer_size - 1) // buffer_size
                     chunk_count = 0
@@ -385,11 +384,8 @@ class AudioEnsembleEngine:
                         
                         if pos % (5 * buffer_size) == 0:
                             gc.collect()
-                        
-                        progress.update(chunk_size)
                     
                     print("Saving ensemble output...", flush=True)
-                    progress.close()
                 
                 self.log_message(f"Successfully created output: {output_path}")
                 print(f"\nEnsemble completed successfully: {output_path}")
