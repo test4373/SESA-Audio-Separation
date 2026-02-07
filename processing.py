@@ -113,15 +113,26 @@ def refresh_auto_output():
         return None, f"Error refreshing output: {str(e)}"
 
 def update_progress_html(progress_label, progress_percent):
-    """Generate progress HTML."""
+    """Generate progress HTML with smooth animations."""
     progress_percent = clamp_percentage(progress_percent)
     if progress_percent > 100:
         print(f"Warning: Progress percentage {progress_percent} exceeds 100, clamping to 100")
+    
+    # Determine if processing is active for pulse animation
+    is_active = 0 < progress_percent < 100
+    pulse_style = "animation: progress-pulse 1.5s ease-in-out infinite;" if is_active else ""
+    
     return f"""
+    <style>
+        @keyframes progress-pulse {{
+            0%, 100% {{ opacity: 1; }}
+            50% {{ opacity: 0.85; }}
+        }}
+    </style>
     <div id="custom-progress" style="margin-top: 10px;">
         <div style="font-size: 1rem; color: #C0C0C0; margin-bottom: 5px;" id="progress-label">{progress_label}</div>
         <div style="width: 100%; background-color: #444; border-radius: 5px; overflow: hidden;">
-            <div id="progress-bar" style="width: {progress_percent}%; height: 20px; background-color: #6e8efb; transition: width 0.3s; max-width: 100%;"></div>
+            <div id="progress-bar" style="width: {progress_percent}%; height: 20px; background: linear-gradient(90deg, #6e8efb, #a855f7); transition: width 0.5s ease-out; max-width: 100%; {pulse_style}"></div>
         </div>
     </div>
     """
@@ -640,7 +651,6 @@ def ensemble_audio_fn(files, method, weights, progress=gr.Progress()):
         for line in process.stdout:
             stdout_output += line
             line_stripped = line.strip()
-            print(f"Ensemble: {line_stripped}")
             
             # Capture real progress percentage from ensemble.py
             if line_stripped.startswith("Progress:"):
@@ -650,11 +660,17 @@ def ensemble_audio_fn(files, method, weights, progress=gr.Progress()):
                 except (ValueError, IndexError):
                     pass
             elif "loading" in line.lower():
+                print(f"Ensemble: {line_stripped}")
                 progress(5, desc="Loading audio files for ensemble...")
             elif "processing ensemble" in line.lower():
+                print(f"Ensemble: {line_stripped}")
                 progress(10, desc="Starting ensemble processing...")
             elif "saving" in line.lower():
+                print(f"Ensemble: {line_stripped}")
                 progress(95, desc="Saving ensemble output...")
+            elif line_stripped and not line_stripped.startswith("Progress:"):
+                # Only print non-progress messages
+                print(f"Ensemble: {line_stripped}")
         
         for line in process.stderr:
             stderr_output += line
@@ -781,8 +797,12 @@ def auto_ensemble_process(
             )
 
             stderr_output = ""
+            last_yield_percent = -1
             for line in process.stdout:
-                print(line.strip())
+                line_stripped = line.strip()
+                # Only print non-progress lines to reduce terminal noise
+                if not line_stripped.startswith("Progress:"):
+                    print(line_stripped)
                 if "Progress:" in line:
                     try:
                         # Match both integer and decimal percentages
@@ -792,10 +812,13 @@ def auto_ensemble_process(
                             model_percentage = (percentage / 100) * model_progress_per_step
                             current_progress = (i * model_progress_per_step) + model_percentage
                             current_progress = clamp_percentage(current_progress)
-                            yield None, i18n("loading_model_progress_label").format(i+1, total_models, clean_model_name, int(percentage)), update_progress_html(
-                                i18n("loading_model_progress").format(i+1, total_models, clean_model_name, current_progress),
-                                current_progress
-                            )
+                            # Yield on every percent change for smooth updates
+                            if int(percentage) != last_yield_percent:
+                                last_yield_percent = int(percentage)
+                                yield None, i18n("loading_model_progress_label").format(i+1, total_models, clean_model_name, int(percentage)), update_progress_html(
+                                    f"Model {i+1}/{total_models}: {clean_model_name} - {int(percentage)}%",
+                                    current_progress
+                                )
                     except (AttributeError, ValueError) as e:
                         print(f"Progress parsing error: {e}")
 
