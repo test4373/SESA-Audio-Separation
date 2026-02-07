@@ -588,7 +588,10 @@ def process_audio(
         dest_path = os.path.join(INPUT_DIR, input_filename)
         shutil.copy(audio_path, dest_path)
 
-        # Get model configuration with cleaned model name
+        # Yield status for model loading
+        yield {"progress": 0, "status": f"📥 Loading model: {clean_model_name}...", "outputs": None}
+        
+        # Get model configuration with cleaned model name (downloads if needed)
         model_type, config_path, start_check_point = get_model_config(clean_model_name, inference_chunk_size, inference_overlap)
 
         # Iterate over the generator and yield progress updates
@@ -840,7 +843,6 @@ def auto_ensemble_process(
 
         for i, model in enumerate(selected_models):
             clean_model_name = clean_model(model)
-            print(f"Processing model {i+1}/{total_models}: Original={model}, Cleaned={clean_model_name}")
             model_output_dir = os.path.join(auto_ensemble_temp, clean_model_name)
             os.makedirs(model_output_dir, exist_ok=True)
 
@@ -852,7 +854,6 @@ def auto_ensemble_process(
             )
 
             model_type, config_path, start_check_point = get_model_config(clean_model_name, auto_chunk_size, auto_overlap)
-            print(f"Model configuration: model_type={model_type}, config_path={config_path}, start_check_point={start_check_point}")
 
             cmd = [
                 "python", INFERENCE_PATH,
@@ -1160,4 +1161,3 @@ def auto_ensemble_process(
         shutil.rmtree(auto_ensemble_temp, ignore_errors=True)
         gc.collect()
         if torch.cuda.is_available():
-            torch.cuda.empty_cache()
