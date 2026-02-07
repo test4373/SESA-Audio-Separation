@@ -469,7 +469,7 @@ def redownload_config(model_name):
         return False, f"Failed to re-download config: {e}"
 
 def download_file(url, path=None, target_filename=None, validate_yaml=True):
-    """Downloads a file from a URL.
+    """Downloads a file from a URL with progress reporting.
     
     Args:
         url: The URL to download from.
@@ -495,6 +495,9 @@ def download_file(url, path=None, target_filename=None, validate_yaml=True):
     try:
         response = requests.get(url, stream=True)
         if response.status_code == 200:
+            # Get total file size for progress reporting
+            total_size = int(response.headers.get('content-length', 0))
+            
             # For YAML files, download to memory first and validate
             is_yaml_file = filename.lower().endswith(('.yaml', '.yml'))
             
@@ -509,9 +512,25 @@ def download_file(url, path=None, target_filename=None, validate_yaml=True):
                 with open(file_path, 'wb') as f:
                     f.write(content)
             else:
+                # Download with progress reporting
+                downloaded_size = 0
+                last_percent = -1
+                print(f"[SESA_DOWNLOAD]START:{filename}", flush=True)
+                
                 with open(file_path, 'wb') as f:
                     for chunk in response.iter_content(chunk_size=8192):
                         f.write(chunk)
+                        downloaded_size += len(chunk)
+                        
+                        # Report download progress
+                        if total_size > 0:
+                            percent = int((downloaded_size / total_size) * 100)
+                            if percent != last_percent:
+                                last_percent = percent
+                                # Format: [SESA_DOWNLOAD]filename:percent
+                                print(f"[SESA_DOWNLOAD]{filename}:{percent}", flush=True)
+                
+                print(f"[SESA_DOWNLOAD]END:{filename}", flush=True)
             
             print(f"File '{filename}' downloaded successfully")
         else:
