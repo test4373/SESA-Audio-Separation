@@ -122,6 +122,9 @@ def demix_pytorch_optimized(
                 leave=False
             ) if pbar else None
             
+            total_samples = mix.shape[1]
+            last_reported_percent = -1
+            
             while i < mix.shape[1]:
                 # Extract chunk
                 part = mix[:, i:i + chunk_size].to(device)
@@ -165,9 +168,16 @@ def demix_pytorch_optimized(
                 
                 if progress_bar:
                     progress_bar.update(step)
+                
+                # Report real progress percentage for GUI capture
+                current_percent = int((i / total_samples) * 100)
+                if current_percent > last_reported_percent and current_percent % 5 == 0:
+                    last_reported_percent = current_percent
+                    print(f"Progress: {current_percent:.1f}%", flush=True)
             
             if progress_bar:
                 progress_bar.close()
+            print("Progress: 100.0%", flush=True)
             
             # Compute final estimated sources
             estimated_sources = result / counter
