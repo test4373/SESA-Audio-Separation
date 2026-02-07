@@ -16,7 +16,7 @@ from assets.i18n.i18n import I18nAuto
 from config_manager import load_config, save_config, update_favorites, save_preset, delete_preset
 from phase_fixer import SOURCE_MODELS, TARGET_MODELS
 import logging
-logging.basicConfig(filename='sesa_gui.log', level=logging.DEBUG)
+logging.basicConfig(filename='sesa_gui.log', level=logging.WARNING)
 
 # BASE_DIR tanımı
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -680,13 +680,11 @@ def create_interface():
                                 preset_category = preset.get("auto_category_dropdown", category)
                                 # Update model choices based on the preset's category
                                 model_choices = update_model_dropdown(preset_category, favorites=favorites)["choices"]
-                                print(f"Preset '{preset_name}' loaded with models: {favorite_models}, category: {preset_category}")
                                 return (
                                     gr.update(value=preset_category),  # Update auto_category_dropdown
                                     gr.update(choices=model_choices, value=favorite_models),  # Update selected_models
                                     gr.update(value=preset["ensemble_method"])  # Update auto_ensemble_type
                                 )
-                            print(f"Preset '{preset_name}' not found.")
                             return gr.update(), gr.update(), gr.update()
 
                         def sync_presets():
@@ -713,7 +711,6 @@ def create_interface():
                                 auto_category_dropdown=auto_category_dropdown  # Pass the category explicitly
                             )
                             save_config(favorites, load_config()["settings"], new_presets)
-                            print(f"Preset dropdown updated with choices: {list(new_presets.keys())}")
                             return gr.update(choices=list(new_presets.keys()), value=None), new_presets, i18n("preset_saved").format(preset_name)
 
                         save_preset_btn.click(
@@ -1366,12 +1363,9 @@ def create_interface():
                     yield update
 
         def update_category_dropdowns(cat):
-            logging.debug(f"Input category: {cat}")
             all_configs = get_all_model_configs_with_custom()
             eng_cat = next((k for k in all_configs.keys() if i18n(k) == cat), list(all_configs.keys())[0])
-            logging.debug(f"Using English category: {eng_cat}")
             choices = update_model_dropdown(eng_cat, favorites=load_config()["favorites"])["choices"]
-            logging.debug(f"Model choices: {choices}")
             return gr.update(choices=choices), gr.update(choices=choices)
 
         model_category.change(
@@ -1410,29 +1404,19 @@ def create_interface():
             outputs=selected_models
         )
 
-        def debug_inputs(*args):
-            input_names = [
-                "input_audio_file", "model_dropdown", "chunk_size", "overlap", "export_format",
-                "optimize_mode", "enable_amp", "enable_tf32", "enable_cudnn_benchmark",
-                "use_tta", "use_demud_phaseremix_inst", "extract_instrumental",
-                "use_apollo", "apollo_chunk_size", "apollo_overlap",
-                "apollo_method", "apollo_normal_model", "apollo_midside_model",
-                "use_matchering", "matchering_passes", "model_category", "selected_model"
-            ]
+        def clean_inputs(*args):
             cleaned_args = list(args)
             cleaned_args[1] = clean_model(cleaned_args[1]) if cleaned_args[1] else None
             cleaned_args[21] = clean_model(cleaned_args[21]) if cleaned_args[21] else None
-            for name, value in zip(input_names, cleaned_args):
-                print(f"UI Input - {name}: {value}")
             return args
 
-        def process_with_debug(*args):
+        def process_wrapper(*args):
             """Generator wrapper that forwards yields from save_settings_on_process."""
-            for update in save_settings_on_process(*debug_inputs(*args)):
+            for update in save_settings_on_process(*clean_inputs(*args)):
                 yield update
 
         process_btn.click(
-            fn=process_with_debug,
+            fn=process_wrapper,
             inputs=[
                 input_audio_file, model_dropdown, chunk_size, overlap, export_format,
                 optimize_mode, enable_amp, enable_tf32, enable_cudnn_benchmark,
