@@ -112,15 +112,33 @@ def refresh_auto_output():
     except Exception as e:
         return None, f"Error refreshing output: {str(e)}"
 
-def update_progress_html(progress_label, progress_percent):
-    """Generate progress HTML with smooth animations."""
+def update_progress_html(progress_label, progress_percent, download_info=None):
+    """Generate progress HTML with smooth animations and optional download percentage.
+    
+    Args:
+        progress_label: Text label to show above the progress bar
+        progress_percent: Overall progress percentage (0-100)
+        download_info: Optional dict with 'filename' and 'percent' for download progress
+    """
     progress_percent = clamp_percentage(progress_percent)
-    if progress_percent > 100:
-        print(f"Warning: Progress percentage {progress_percent} exceeds 100, clamping to 100")
     
     # Determine if processing is active for pulse animation
     is_active = 0 < progress_percent < 100
     pulse_style = "animation: progress-pulse 1.5s ease-in-out infinite;" if is_active else ""
+    
+    # Build download sub-bar if downloading
+    download_html = ""
+    if download_info and isinstance(download_info, dict):
+        dl_filename = download_info.get('filename', '')
+        dl_percent = clamp_percentage(download_info.get('percent', 0))
+        download_html = f"""
+        <div style="margin-top: 8px; padding: 8px; background: rgba(0,0,0,0.3); border-radius: 5px;">
+            <div style="font-size: 0.85rem; color: #a0a0a0; margin-bottom: 4px;">📥 {dl_filename} - %{int(dl_percent)}</div>
+            <div style="width: 100%; background-color: #333; border-radius: 4px; overflow: hidden;">
+                <div style="width: {dl_percent}%; height: 14px; background: linear-gradient(90deg, #4ade80, #22d3ee); transition: width 0.3s ease-out; border-radius: 4px;"></div>
+            </div>
+        </div>
+        """
     
     return f"""
     <style>
@@ -134,6 +152,7 @@ def update_progress_html(progress_label, progress_percent):
         <div style="width: 100%; background-color: #444; border-radius: 5px; overflow: hidden;">
             <div id="progress-bar" style="width: {progress_percent}%; height: 20px; background: linear-gradient(90deg, #6e8efb, #a855f7); transition: width 0.5s ease-out; max-width: 100%; {pulse_style}"></div>
         </div>
+        {download_html}
     </div>
     """
 
@@ -142,7 +161,6 @@ def extract_model_name_from_checkpoint(checkpoint_path):
         return "Unknown"
     base_name = os.path.basename(checkpoint_path)
     model_name = os.path.splitext(base_name)[0]
-    print(f"Original checkpoint path: {checkpoint_path}, extracted model_name: {model_name}")
     return model_name.strip()
 
 
@@ -198,7 +216,6 @@ def run_command_and_process_files(
         # Create directories and check Google Drive access
         setup_directories()
 
-        print(f"run_command_and_process_files: model_type={model_type}, config_path={config_path}, start_check_point={start_check_point}, inference_chunk_size={inference_chunk_size}, inference_overlap={inference_overlap}, apollo_chunk_size={apollo_chunk_size}, apollo_overlap={apollo_overlap}, progress_type={type(progress)}")
         if not config_path:
             raise ValueError(f"Configuration path is empty: model_type: {model_type}")
         if not os.path.exists(config_path):
@@ -301,13 +318,31 @@ def run_command_and_process_files(
 
         stderr_output = ""
         last_yield_percent = -1
+        downloading_file = None
         
         # Read stdout line-by-line for real-time progress updates
         for line in process.stdout:
             line_stripped = line.strip()
             
+            # Check for download progress [SESA_DOWNLOAD]
+            if line_stripped.startswith("[SESA_DOWNLOAD]"):
+                try:
+                    dl_info = line_stripped.replace("[SESA_DOWNLOAD]", "")
+                    if dl_info.startswith("START:"):
+                        downloading_file = dl_info.replace("START:", "")
+                        yield {"progress": 0, "status": f"📥 Model indiriliyor: {downloading_file}", "outputs": None}
+                    elif dl_info.startswith("END:"):
+                        downloading_file = None
+                    elif ":" in dl_info:
+                        parts = dl_info.rsplit(":", 1)
+                        if len(parts) == 2:
+                            filename, percent_str = parts
+                            download_percent = int(percent_str)
+                            yield {"progress": 0, "status": f"📥 İndiriliyor: {filename} - %{download_percent}", "outputs": None}
+                except (ValueError, TypeError):
+                    pass
             # Check for [SESA_PROGRESS] prefix from inference script
-            if line_stripped.startswith("[SESA_PROGRESS]"):
+            elif line_stripped.startswith("[SESA_PROGRESS]"):
                 try:
                     percentage_str = line_stripped.replace("[SESA_PROGRESS]", "").strip()
                     percentage = float(percentage_str) if percentage_str else 0
@@ -323,14 +358,16 @@ def run_command_and_process_files(
                 except (ValueError, TypeError):
                     pass
             else:
-                # Print non-progress lines for logging
-                if line_stripped:
+                # Only print important non-progress lines (errors, warnings, key info)
+                if line_stripped and not line_stripped.startswith(("  ", "    ")):
                     print(line_stripped)
         
-        # Capture stderr
+        # Capture stderr (only print errors)
         for line in process.stderr:
             stderr_output += line
-            print(f"Stderr: {line.strip()}")
+            line_s = line.strip()
+            if line_s and ("error" in line_s.lower() or "warning" in line_s.lower() or "traceback" in line_s.lower()):
+                print(f"⚠️ {line_s}")
         
         process.wait()
         
@@ -346,6 +383,7 @@ def run_command_and_process_files(
             raise FileNotFoundError("No output files created in OUTPUT_DIR")
 
         def rename_files_with_model(folder, filename_model):
+            timestamp = datetime.now().strftime("%d-%m-%Y_%H-%M")
             for filename in sorted(os.listdir(folder)):
                 file_path = os.path.join(folder, filename)
                 if not any(filename.lower().endswith(ext) for ext in ['.mp3', '.wav', '.flac', '.aac', '.ogg', '.m4a']):
@@ -359,12 +397,12 @@ def run_command_and_process_files(
                 # Normalize 'instrument' to 'Instrumental' for consistency
                 type_suffix = 'Instrumental' if detected_type == 'instrument' else (detected_type.capitalize() if detected_type else "Processed")
                 clean_base = sanitize_filename(base.split('_')[0]).rsplit('.', 1)[0]
-                new_filename = f"{clean_base}_{type_suffix}_{filename_model}{ext}"
+                new_filename = f"{timestamp}_{clean_base}_{type_suffix}_{filename_model}{ext}"
                 new_file_path = os.path.join(folder, new_filename)
                 try:
                     os.rename(file_path, new_file_path)
                 except Exception as e:
-                    print(f"Could not rename {file_path} to {new_file_path}: {str(e)}")
+                    print(f"⚠️ Dosya yeniden adlandırılamadı: {os.path.basename(file_path)} -> {os.path.basename(new_file_path)}: {str(e)}")
 
         rename_files_with_model(OUTPUT_DIR, filename_model)
 
@@ -507,12 +545,9 @@ def process_audio(
         os.makedirs(OLD_OUTPUT_DIR, exist_ok=True)
         move_old_files(OUTPUT_DIR)
 
-        print(f"process_audio: model parameter received: {model}")
         # Clean model name, remove ⭐ and other unwanted characters
         clean_model_name = clean_model(model) if not model.startswith("/") else extract_model_name_from_checkpoint(model)
-        print(f"Processing audio: {audio_path}, model: {clean_model_name}")
-
-        print(f"Raw UI inputs - chunk_size: {chunk_size}, overlap: {overlap}, apollo_chunk_size: {apollo_chunk_size}, apollo_overlap: {apollo_overlap}, apollo_method: {apollo_method}")
+        print(f"🎵 Processing: {os.path.basename(audio_path)} | Model: {clean_model_name}")
 
         # Validate inference parameters
         try:
@@ -548,19 +583,13 @@ def process_audio(
         else:
             print(f"Invalid apollo_method: {apollo_method}. Defaulting to: normal_method.")
             apollo_method = "normal_method"
-        print(f"Parsed apollo_method: {apollo_method}")
-
-        print(f"Corrected values - inference_chunk_size: {inference_chunk_size}, inference_overlap: {inference_overlap}, apollo_chunk_size: {apollo_chunk_size}, apollo_overlap: {apollo_overlap}")
-
         # Copy input file to INPUT_DIR
         input_filename = os.path.basename(audio_path)
         dest_path = os.path.join(INPUT_DIR, input_filename)
         shutil.copy(audio_path, dest_path)
-        print(f"Input file copied: {dest_path}")
 
         # Get model configuration with cleaned model name
         model_type, config_path, start_check_point = get_model_config(clean_model_name, inference_chunk_size, inference_overlap)
-        print(f"Model configuration: model_type={model_type}, config_path={config_path}, start_check_point={start_check_point}")
 
         # Iterate over the generator and yield progress updates
         outputs = None
@@ -789,18 +818,15 @@ def auto_ensemble_process(
         input_filename = os.path.basename(audio_path)
         dest_path = os.path.join(INPUT_DIR, input_filename)
         shutil.copy(audio_path, dest_path)
-        print(f"Input file copied: {dest_path}")
 
         # Parse apollo method
         if auto_apollo_method in ["2", 2]:
             auto_apollo_method = "mid_side_method"
         elif auto_apollo_method in ["1", 1]:
             auto_apollo_method = "normal_method"
-        print(f"Parsed auto_apollo_method: {auto_apollo_method}")
 
         corrected_auto_chunk_size = int(auto_apollo_chunk_size)
         corrected_auto_overlap = int(auto_apollo_overlap)
-        print(f"Corrected values - auto_apollo_chunk_size: {corrected_auto_chunk_size}, auto_apollo_overlap: {corrected_auto_overlap}")
 
         # Setup temporary directories
         auto_ensemble_temp = os.path.join(BASE_DIR, "auto_ensemble_temp")
@@ -864,23 +890,25 @@ def auto_ensemble_process(
                 # Check for download progress [SESA_DOWNLOAD]
                 if line_stripped.startswith("[SESA_DOWNLOAD]"):
                     try:
-                        download_info = line_stripped.replace("[SESA_DOWNLOAD]", "")
-                        if download_info.startswith("START:"):
-                            downloading_file = download_info.replace("START:", "")
-                            yield None, f"Downloading: {downloading_file}", update_progress_html(
-                                f"Downloading model file: {downloading_file}",
-                                i * model_progress_per_step
+                        dl_info = line_stripped.replace("[SESA_DOWNLOAD]", "")
+                        if dl_info.startswith("START:"):
+                            downloading_file = dl_info.replace("START:", "")
+                            yield None, f"📥 İndiriliyor: {downloading_file}", update_progress_html(
+                                f"Model indiriliyor: {downloading_file}",
+                                i * model_progress_per_step,
+                                download_info={"filename": downloading_file, "percent": 0}
                             )
-                        elif download_info.startswith("END:"):
+                        elif dl_info.startswith("END:"):
                             downloading_file = None
-                        elif ":" in download_info:
-                            parts = download_info.rsplit(":", 1)
+                        elif ":" in dl_info:
+                            parts = dl_info.rsplit(":", 1)
                             if len(parts) == 2:
                                 filename, percent_str = parts
                                 download_percent = int(percent_str)
-                                yield None, f"Downloading {filename}: {download_percent}%", update_progress_html(
-                                    f"Downloading: {filename} - {download_percent}%",
-                                    i * model_progress_per_step
+                                yield None, f"📥 İndiriliyor: {filename} - %{download_percent}", update_progress_html(
+                                    f"Model indiriliyor: {filename}",
+                                    i * model_progress_per_step,
+                                    download_info={"filename": filename, "percent": download_percent}
                                 )
                     except (ValueError, TypeError):
                         pass
