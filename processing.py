@@ -1145,6 +1145,8 @@ def auto_ensemble_process(
                 print(f"File not found in Google Drive, copying from local path: {output_path}")
                 shutil.copy(output_path, drive_output_path)
                 print(f"Copied to Google Drive: {drive_output_path}")
+        else:
+            drive_output_path = output_path
 
         yield output_path, i18n("success_output_created") + f" Saved to {drive_output_path if IS_COLAB else output_path}", update_progress_html(
             i18n("ensemble_completed"), 100
@@ -1161,3 +1163,4 @@ def auto_ensemble_process(
         shutil.rmtree(auto_ensemble_temp, ignore_errors=True)
         gc.collect()
         if torch.cuda.is_available():
+            torch.cuda.empty_cache()
