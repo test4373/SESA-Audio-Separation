@@ -589,7 +589,11 @@ def process_audio(
         shutil.copy(audio_path, dest_path)
 
         # Yield status for model loading
-        yield {"progress": 0, "status": f"📥 Loading model: {clean_model_name}...", "outputs": None}
+        yield (
+            None, None, None, None, None, None, None, None, None, None, None, None, None, None,
+            f"📥 Loading model: {clean_model_name}...",
+            update_progress_html(f"Loading model: {clean_model_name}", 0)
+        )
         
         # Get model configuration with cleaned model name (downloads if needed)
         model_type, config_path, start_check_point = get_model_config(clean_model_name, inference_chunk_size, inference_overlap)
