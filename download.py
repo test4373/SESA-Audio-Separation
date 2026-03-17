@@ -61,7 +61,7 @@ def download_callback(url, download_type='direct', cookie_file=None):
                 drive_mounted = True
         except AttributeError as ae:
             # Handle 'NoneType' object has no attribute 'kernel' error
-            print(f"⚠️ Google Drive mount skipped (Colab kernel issue): {str(ae)}")
+            print(f"Warning: Google Drive mount skipped (Colab kernel issue): {str(ae)}")
             print(i18n("continuing_without_google_drive"))
         except Exception as e:
             print(i18n("google_drive_mount_error").format(str(e)))
@@ -180,7 +180,7 @@ def download_callback(url, download_type='direct', cookie_file=None):
         except Exception as e:
             # If no cookies available or first method failed, try with cookies
             if os.path.exists(COOKIE_PATH):
-                print(f"⚠️ First attempt failed, trying with cookies...")
+                print(f"First attempt failed, trying with cookies...")
                 try:
                     with yt_dlp.YoutubeDL(ydl_opts_cookie) as ydl:
                         info_dict = ydl.extract_info(url, download=True)
@@ -209,7 +209,7 @@ def download_callback(url, download_type='direct', cookie_file=None):
             error_msg = i18n("download_error").format(str(e))
             # Add hint for yt-dlp update if it's a YouTube issue
             if 'youtube' in url.lower() or 'youtu.be' in url.lower():
-                error_msg += "\n\n💡 Try: pip install -U yt-dlp"
+                error_msg += "\n\nTry: pip install -U yt-dlp"
             print(error_msg)
             return None, error_msg, None, None, None, None
 
