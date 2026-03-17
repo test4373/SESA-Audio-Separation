@@ -10,7 +10,7 @@ import time
 import random
 from helpers import update_model_dropdown, handle_file_upload, clear_old_output, save_uploaded_file, update_file_list, clean_model, get_model_categories
 from download import download_callback
-from model import get_model_config, MODEL_CONFIGS, get_all_model_configs_with_custom, add_custom_model, delete_custom_model, get_custom_models_list, SUPPORTED_MODEL_TYPES, load_custom_models
+from model import get_model_config, MODEL_CONFIGS, get_all_model_configs_with_custom, add_custom_model, delete_custom_model, get_custom_models_list, SUPPORTED_MODEL_TYPES, load_custom_models, get_model_chunk_size
 from processing import process_audio, auto_ensemble_process, ensemble_audio_fn, refresh_auto_output
 from assets.i18n.i18n import I18nAuto
 from config_manager import load_config, save_config, update_favorites, save_preset, delete_preset
@@ -263,11 +263,33 @@ def create_interface():
                                         value=initial_settings["export_format"]
                                     )
                                 with gr.Column(scale=1):
+                                    _init_cs_mode = initial_settings.get("chunk_size_mode", "base")
+                                    chunk_size_mode = gr.Radio(
+                                        label=i18n("chunk_size_mode"),
+                                        choices=["base", "custom", "yaml"],
+                                        value=_init_cs_mode,
+                                        info=i18n("chunk_size_mode_info")
+                                    )
                                     chunk_size = gr.Dropdown(
                                         label=i18n("chunk_size"),
                                         choices=[352800, 485100],
                                         value=initial_settings["chunk_size"],
-                                                                                info=i18n("chunk_size_info")
+                                        info=i18n("chunk_size_info"),
+                                        visible=(_init_cs_mode == "base")
+                                    )
+                                    chunk_size_custom = gr.Number(
+                                        label=i18n("chunk_size_custom_label"),
+                                        value=initial_settings.get("chunk_size_custom", 352800),
+                                        precision=0,
+                                        info=i18n("chunk_size_custom_info"),
+                                        visible=(_init_cs_mode == "custom")
+                                    )
+                                    chunk_size_yaml_display = gr.Textbox(
+                                        label=i18n("chunk_size_yaml_label"),
+                                        value=i18n("chunk_size_yaml_not_downloaded"),
+                                        interactive=False,
+                                        info=i18n("chunk_size_yaml_display_info"),
+                                        visible=(_init_cs_mode == "yaml")
                                     )
 
                             with gr.Row():
@@ -410,11 +432,23 @@ def create_interface():
                             clear_old_output_btn = gr.Button(i18n("reset"), variant="secondary")
                         clear_old_output_status = gr.Textbox(label=i18n("status"), interactive=False)
 
-                        # Favorite handler
-                        def update_favorite_button(model, favorites):
+                        # Favorite handler + chunk size auto-update
+                        def update_favorite_button(model, favorites, cs_mode):
                             cleaned_model = clean_model(model) if model else None
                             is_favorited = cleaned_model in favorites if cleaned_model else False
-                            return gr.update(value=i18n("remove_favorite") if is_favorited else i18n("add_favorite"))
+                            fav_btn = gr.update(value=i18n("remove_favorite") if is_favorited else i18n("add_favorite"))
+                            chunk_update = gr.update()
+                            yaml_update = gr.update()
+                            if cleaned_model:
+                                native_chunk = get_model_chunk_size(cleaned_model)
+                                if cs_mode == "base" and native_chunk and native_chunk in [352800, 485100]:
+                                    chunk_update = gr.update(value=native_chunk)
+                                if cs_mode == "yaml":
+                                    if native_chunk:
+                                        yaml_update = gr.update(value=i18n("chunk_size_yaml_detected").format(native_chunk))
+                                    else:
+                                        yaml_update = gr.update(value=i18n("chunk_size_yaml_not_downloaded"))
+                            return fav_btn, chunk_update, yaml_update
 
                         def toggle_favorite(model, favorites):
                             if not model:
@@ -430,10 +464,29 @@ def create_interface():
                                 gr.update(value=i18n("add_favorite") if is_favorited else i18n("remove_favorite"))
                             )
 
+                        def on_chunk_size_mode_change(mode, model):
+                            cleaned = clean_model(model) if model else None
+                            native_chunk = get_model_chunk_size(cleaned) if cleaned else None
+                            yaml_text = (
+                                i18n("chunk_size_yaml_detected").format(native_chunk)
+                                if native_chunk else i18n("chunk_size_yaml_not_downloaded")
+                            )
+                            return (
+                                gr.update(visible=(mode == "base")),
+                                gr.update(visible=(mode == "custom")),
+                                gr.update(visible=(mode == "yaml"), value=yaml_text),
+                            )
+
+                        chunk_size_mode.change(
+                            fn=on_chunk_size_mode_change,
+                            inputs=[chunk_size_mode, model_dropdown],
+                            outputs=[chunk_size, chunk_size_custom, chunk_size_yaml_display]
+                        )
+
                         model_dropdown.change(
                             fn=update_favorite_button,
-                            inputs=[model_dropdown, favorites_state],
-                            outputs=favorite_button
+                            inputs=[model_dropdown, favorites_state, chunk_size_mode],
+                            outputs=[favorite_button, chunk_size, chunk_size_yaml_display]
                         )
 
                         favorite_button.click(
@@ -468,36 +521,36 @@ def create_interface():
                         with gr.Tabs():
                             with gr.Tab(i18n("main_tab")) as main_tab:
                                 with gr.Column():
-                                    original_audio = gr.Audio(label=i18n("original"), interactive=False, streaming=True)
+                                    original_audio = gr.Audio(label=i18n("original"), interactive=False)
                                     with gr.Row():
-                                        vocals_audio = gr.Audio(label=i18n("vocals"), streaming=True)
-                                        instrumental_audio = gr.Audio(label=i18n("instrumental_output"), streaming=True)
-                                        other_audio = gr.Audio(label=i18n("other"), streaming=True)
+                                        vocals_audio = gr.Audio(label=i18n("vocals"))
+                                        instrumental_audio = gr.Audio(label=i18n("instrumental_output"))
+                                        other_audio = gr.Audio(label=i18n("other"))
 
                             with gr.Tab(i18n("details_tab")) as details_tab:
                                 with gr.Column():
                                     with gr.Row():
-                                        male_audio = gr.Audio(label=i18n("male"), streaming=True)
-                                        female_audio = gr.Audio(label=i18n("female"), streaming=True)
-                                        speech_audio = gr.Audio(label=i18n("speech"), streaming=True)
+                                        male_audio = gr.Audio(label=i18n("male"))
+                                        female_audio = gr.Audio(label=i18n("female"))
+                                        speech_audio = gr.Audio(label=i18n("speech"))
                                     with gr.Row():
-                                        drum_audio = gr.Audio(label=i18n("drums"), streaming=True)
-                                        bass_audio = gr.Audio(label=i18n("bass"), streaming=True)
+                                        drum_audio = gr.Audio(label=i18n("drums"))
+                                        bass_audio = gr.Audio(label=i18n("bass"))
                                     with gr.Row():
-                                        effects_audio = gr.Audio(label=i18n("effects"), streaming=True)
+                                        effects_audio = gr.Audio(label=i18n("effects"))
 
                             with gr.Tab(i18n("advanced_tab")) as advanced_tab:
                                 with gr.Column():
                                     with gr.Row():
-                                        phaseremix_audio = gr.Audio(label=i18n("phase_remix"), streaming=True)
-                                        dry_audio = gr.Audio(label=i18n("dry"), streaming=True)
+                                        phaseremix_audio = gr.Audio(label=i18n("phase_remix"))
+                                        dry_audio = gr.Audio(label=i18n("dry"))
                                     with gr.Row():
-                                        music_audio = gr.Audio(label=i18n("music"), streaming=True)
-                                        karaoke_audio = gr.Audio(label=i18n("karaoke"), streaming=True)
-                                        bleed_audio = gr.Audio(label=i18n("bleed"), streaming=True)
+                                        music_audio = gr.Audio(label=i18n("music"))
+                                        karaoke_audio = gr.Audio(label=i18n("karaoke"))
+                                        bleed_audio = gr.Audio(label=i18n("bleed"))
                                     with gr.Row():
-                                        mid_audio = gr.Audio(label="Mid", streaming=True)
-                                        side_audio = gr.Audio(label="Side", streaming=True)
+                                        mid_audio = gr.Audio(label="Mid")
+                                        side_audio = gr.Audio(label="Side")
 
                         separation_progress_html = gr.HTML(
                             value=f"""
@@ -1322,8 +1375,24 @@ def create_interface():
             apollo_method_value = args[15]
             backend_apollo_method = "mid_side_method" if apollo_method_value == i18n("mid_side_method") else "normal_method"
             cleaned_model = clean_model(args[1]) if args[1] else None
+
+            # Compute effective chunk_size based on mode
+            # args[22] = chunk_size_mode, args[23] = chunk_size_custom value
+            cs_mode = args[22] if len(args) > 22 else "base"
+            cs_custom_val = args[23] if len(args) > 23 else 352800
+            cs_base_val = args[2]  # base dropdown value
+
+            if cs_mode == "custom":
+                effective_chunk = int(cs_custom_val) if cs_custom_val else 352800
+            elif cs_mode == "yaml":
+                effective_chunk = "yaml"  # signal processing.py to read from YAML
+            else:
+                effective_chunk = int(cs_base_val) if cs_base_val else 352800
+
             settings = {
-                "chunk_size": args[2],
+                "chunk_size": cs_base_val,
+                "chunk_size_mode": cs_mode,
+                "chunk_size_custom": cs_custom_val,
                 "overlap": args[3],
                 "export_format": args[4],
                 "optimize_mode": args[5],
@@ -1346,8 +1415,10 @@ def create_interface():
                 "auto_ensemble_type": args[11]
             }
             save_config(load_config()["favorites"], settings, load_config()["presets"])
-            modified_args = list(args)
+            # Build args for process_audio (indices 0-21 only, with effective_chunk at [2])
+            modified_args = list(args[:22])
             modified_args[1] = cleaned_model
+            modified_args[2] = effective_chunk
             modified_args[21] = cleaned_model
             # Forward all yields from process_audio for real-time progress updates
             for update in process_audio(*modified_args):
@@ -1411,7 +1482,7 @@ def create_interface():
             cleaned_args = list(args)
             cleaned_args[1] = clean_model(cleaned_args[1]) if cleaned_args[1] else None
             cleaned_args[21] = clean_model(cleaned_args[21]) if cleaned_args[21] else None
-            return args
+            return cleaned_args
 
         def process_wrapper(*args):
             """Generator wrapper that forwards yields from save_settings_on_process."""
@@ -1426,7 +1497,8 @@ def create_interface():
                 use_tta, use_demud_phaseremix_inst, extract_instrumental,
                 use_apollo, apollo_chunk_size, apollo_overlap,
                 apollo_method, apollo_normal_model, apollo_midside_model,
-                use_matchering, matchering_passes, model_category, model_dropdown
+                use_matchering, matchering_passes, model_category, model_dropdown,
+                chunk_size_mode, chunk_size_custom
             ],
             outputs=[
                 vocals_audio, instrumental_audio, phaseremix_audio, drum_audio, karaoke_audio,
