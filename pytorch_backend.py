@@ -63,11 +63,6 @@ class PyTorchBackend:
             
             # Enable cuBLAS optimizations
             os.environ['CUBLAS_WORKSPACE_CONFIG'] = ':4096:8'
-            
-            print("🔥 ULTRA-OPTIMIZATION: CUDA optimizations enabled")
-            print("   ✅ cuDNN benchmark: ON")
-            print("   ✅ TF32: ON")
-            print("   ✅ cuBLAS optimizations: ON")
         
         # Optimize CPU inference
         if self.device == 'cpu':
@@ -75,7 +70,7 @@ class PyTorchBackend:
             num_threads = multiprocessing.cpu_count()
             torch.set_num_threads(num_threads)
             torch.set_num_interop_threads(num_threads)
-            print(f"🔥 ULTRA-OPTIMIZATION: CPU threads set to {num_threads}")
+            print(f"CPU threads set to {num_threads}")
     
     def optimize_model(
         self,
@@ -103,7 +98,7 @@ class PyTorchBackend:
         nn.Module
             Optimized model
         """
-        print(f"🚀 ULTRA-OPTIMIZING model with mode: {self.optimize_mode}")
+        print(f"Optimizing model with mode: {self.optimize_mode}")
         
         self.model = model.eval().to(self.device)
         self.use_amp = use_amp
@@ -115,7 +110,7 @@ class PyTorchBackend:
         # Apply memory format optimization (default: channels_last for CUDA)
         # Note: Audio models use 3D tensors, so channels_last is applied only where beneficial
         if use_channels_last and self.device.startswith('cuda'):
-            print("  ✅ Using channels-last optimization (RECOMMENDED)")
+            print("  Using channels-last optimization")
             # Only apply to model if it has 4D conv layers, otherwise skip silently
             try:
                 with warnings.catch_warnings():
@@ -137,18 +132,18 @@ class PyTorchBackend:
         elif self.optimize_mode == 'channels_last':
             self.compiled_model = self.model
         else:
-            print("  ✅ Using default optimization")
+            print("  Using default optimization")
             self.compiled_model = self.model
         
         # Apply fusion optimizations if possible
         try:
             if hasattr(torch.nn.utils, 'fusion'):
                 self.compiled_model = torch.nn.utils.fusion.fuse_conv_bn_eval(self.compiled_model)
-                print("  ✅ Conv-BN fusion applied")
+                print("  Conv-BN fusion applied")
         except:
             pass
         
-        print("✅✅✅ ULTRA-OPTIMIZATION complete! Model ready for MAXIMUM SPEED")
+        print("Optimization complete")
         return self.compiled_model
     
     def _compile_model(self, model: nn.Module) -> nn.Module:
@@ -167,22 +162,22 @@ class PyTorchBackend:
         """
         try:
             if hasattr(torch, 'compile'):
-                print("  🔥 Compiling model with torch.compile (ULTRA mode)")
+                print("  Compiling model with torch.compile")
                 # Try max-autotune for best performance
                 try:
                     compiled = torch.compile(model, mode='max-autotune', fullgraph=True)
-                    print("  ✅ Using max-autotune mode (FASTEST)")
+                    print("  Using max-autotune mode")
                     return compiled
                 except:
                     # Fallback to reduce-overhead
                     compiled = torch.compile(model, mode='reduce-overhead')
-                    print("  ✅ Using reduce-overhead mode")
+                    print("  Using reduce-overhead mode")
                     return compiled
             else:
-                print("  ⚠ torch.compile not available (requires PyTorch 2.0+)")
+                print("  torch.compile not available (requires PyTorch 2.0+)")
                 return model
         except Exception as e:
-            print(f"  ⚠ Compilation failed: {e}")
+            print(f"  Compilation failed: {e}")
             return model
     
     def _jit_trace_model(self, model: nn.Module, example_input: torch.Tensor) -> nn.Module:
@@ -208,7 +203,7 @@ class PyTorchBackend:
             traced = torch.jit.optimize_for_inference(traced)
             return traced
         except Exception as e:
-            print(f"  ⚠ JIT tracing failed: {e}")
+            print(f"  JIT tracing failed: {e}")
             return model
     
     def save_optimized_model(self, save_path: str):
@@ -260,30 +255,25 @@ class PyTorchBackend:
             return self.compiled_model
         except (pickle.UnpicklingError, RuntimeError, EOFError) as e:
             error_details = f"""
-╔══════════════════════════════════════════════════════════════════════════════╗
-║                         CHECKPOINT FILE CORRUPTED                            ║
-╚══════════════════════════════════════════════════════════════════════════════╝
+CHECKPOINT FILE CORRUPTED
 
-⚠️  Error: {str(e)}
+Error: {str(e)}
 
-❌ The checkpoint file appears to be corrupted or was not downloaded correctly.
-   File: {load_path}
+The checkpoint file appears to be corrupted or was not downloaded correctly.
+File: {load_path}
 
 Common causes:
-  • File is an HTML page (wrong download URL, e.g., HuggingFace /blob/ instead of /resolve/)
-  • Incomplete or interrupted download
-  • Network issues during download
-  • File system corruption
+  - File is an HTML page (wrong download URL, e.g., HuggingFace /blob/ instead of /resolve/)
+  - Incomplete or interrupted download
+  - Network issues during download
+  - File system corruption
 
-🔧 Solution:
+Solution:
   1. Delete the corrupted checkpoint file:
      {load_path}
-  
   2. Re-run the application - it will automatically re-download the model
-  
   3. If the problem persists, check that your model URL uses /resolve/ not /blob/
      Example: https://huggingface.co/user/repo/resolve/main/model.ckpt
-
 """
             print(error_details)
             raise
@@ -349,11 +339,11 @@ class PyTorchOptimizer:
     
     @staticmethod
     def enable_cudnn_benchmark():
-        """Enable cuDNN benchmark mode for MAXIMUM speed."""
+        """Enable cuDNN benchmark mode."""
         if torch.cuda.is_available():
             torch.backends.cudnn.benchmark = True
             torch.backends.cudnn.deterministic = False
-            print("✅ cuDNN benchmark enabled (ULTRA mode)")
+            print("cuDNN benchmark enabled")
     
     @staticmethod
     def enable_cudnn_deterministic():
@@ -365,13 +355,13 @@ class PyTorchOptimizer:
     
     @staticmethod
     def enable_tf32():
-        """Enable TF32 for Ampere GPUs (RTX 30xx+) with ULTRA settings."""
+        """Enable TF32 for Ampere GPUs (RTX 30xx+)."""
         if torch.cuda.is_available():
             torch.backends.cuda.matmul.allow_tf32 = True
             torch.backends.cudnn.allow_tf32 = True
             # Also enable for float32 matmul precision
             torch.set_float32_matmul_precision('high')  # or 'highest' for max speed
-            print("✅ TF32 enabled (ULTRA mode)")
+            print("TF32 enabled")
     
     @staticmethod
     def set_num_threads(num_threads: int):
@@ -405,7 +395,7 @@ class PyTorchOptimizer:
         try:
             # Try to fuse batch norm
             model = torch.quantization.fuse_modules(model, inplace=True)
-            print("✅ Batch norm fused (FASTER)")
+            print("Batch norm fused")
         except:
             pass
         
@@ -413,7 +403,7 @@ class PyTorchOptimizer:
             # Try to fuse conv-bn if available
             if hasattr(torch.nn.utils, 'fusion'):
                 model = torch.nn.utils.fusion.fuse_conv_bn_eval(model)
-                print("✅ Conv-BN fused (FASTER)")
+                print("Conv-BN fused")
         except:
             pass
         
