@@ -342,5 +342,5 @@
   "model_delete_error": "❌ Fehler beim Löschen des Modells: {}",
   "refresh_models": "🔄 Aktualisieren",
   "custom_model_info": "Fügen Sie benutzerdefinierte Modelle durch Angabe von Download-Links hinzu. Modelle werden bei Verwendung automatisch heruntergeladen.",
-  "select_model_to_delete": "Wählen Sie ein Modell zum Löschen aus"
-}
+  "select_model_to_delete": "Wählen Sie ein Modell zum Löschen aus",
+  "downloading_model_file": "Modell wird heruntergeladen: {}",
