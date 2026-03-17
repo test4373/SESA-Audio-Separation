@@ -352,6 +352,6 @@
   "refresh_models": "🔄 Actualiser",
   "custom_model_info": "Ajoutez des modèles personnalisés en fournissant des liens de téléchargement. Les modèles seront téléchargés automatiquement lors de leur utilisation.",
   "select_model_to_delete": "Sélectionnez un modèle à supprimer",
-  "success_output_created": "✅ Succès ! Fichier de sortie créé."
-}
-
+  "success_output_created": "✅ Succès ! Fichier de sortie créé.",
+  "downloading_model_file": "Téléchargement du modèle : {}",
+  "downloading_file_progress": "Téléchargement : {} - {}%",
