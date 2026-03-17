@@ -282,12 +282,12 @@ def create_interface():
                                     )
 
                             with gr.Accordion(i18n("backend_settings"), open=True) as backend_settings_accordion:
-                                gr.Markdown(f"### 🔥 {i18n('inference_backend')} - Ultra Optimized PyTorch")
-                                gr.Markdown("**Varsayılan olarak aktif - Maximum hız optimizasyonu**")
+                                gr.Markdown(f"### {i18n('inference_backend')} - PyTorch")
+                                gr.Markdown("**Varsayılan olarak aktif**")
                                 
                                 with gr.Row():
                                     optimize_mode = gr.Dropdown(
-                                        label="🚀 Optimization Mode",
+                                        label="Optimization Mode",
                                         choices=['channels_last', 'compile', 'default'],
                                         value=initial_settings.get("optimize_mode", "channels_last"),
                                         info="channels_last: RTX GPUs için en hızlı | compile: PyTorch 2.0+ için ekstra hız | default: Standart"
@@ -295,17 +295,17 @@ def create_interface():
                                 
                                 with gr.Row():
                                     enable_amp = gr.Checkbox(
-                                        label="⚡ Mixed Precision (AMP)",
+                                        label="Mixed Precision (AMP)",
                                         value=initial_settings.get("enable_amp", True),
                                         info="2x daha hızlı inference - önerilir"
                                     )
                                     enable_tf32 = gr.Checkbox(
-                                        label="🎯 TF32 Acceleration",
+                                        label="TF32 Acceleration",
                                         value=initial_settings.get("enable_tf32", True),
                                         info="RTX 30xx+ için ekstra hız artışı"
                                     )
                                     enable_cudnn_benchmark = gr.Checkbox(
-                                        label="⚙️ cuDNN Benchmark",
+                                        label="cuDNN Benchmark",
                                         value=initial_settings.get("enable_cudnn_benchmark", True),
                                         info="İlk çalışmada yavaş, sonraki çalışmalarda çok hızlı"
                                     )
@@ -495,6 +495,9 @@ def create_interface():
                                         music_audio = gr.Audio(label=i18n("music"), streaming=True)
                                         karaoke_audio = gr.Audio(label=i18n("karaoke"), streaming=True)
                                         bleed_audio = gr.Audio(label=i18n("bleed"), streaming=True)
+                                    with gr.Row():
+                                        mid_audio = gr.Audio(label="Mid", streaming=True)
+                                        side_audio = gr.Audio(label="Side", streaming=True)
 
                         separation_progress_html = gr.HTML(
                             value=f"""
@@ -1101,7 +1104,7 @@ def create_interface():
                     
                     for idx, file_path in enumerate(all_files, 1):
                         if stop_flag:
-                            results.append([idx, os.path.basename(file_path), "⏹️ Stopped"])
+                            results.append([idx, os.path.basename(file_path), "Stopped"])
                             continue
                         
                         results.append([idx, os.path.basename(file_path), "🔄 Processing..."])
@@ -1117,9 +1120,9 @@ def create_interface():
                         
                         try:
                             # Process file using inference
-                            results[-1][2] = "✅ Done"
+                            results[-1][2] = "Done"
                         except Exception as e:
-                            results[-1][2] = f"❌ Error: {str(e)[:30]}"
+                            results[-1][2] = f"Error: {str(e)[:30]}"
                     
                     final_status = i18n("batch_stopped") if stop_flag else i18n("batch_completed")
                     return results, final_status, progress_html
@@ -1429,6 +1432,7 @@ def create_interface():
                 vocals_audio, instrumental_audio, phaseremix_audio, drum_audio, karaoke_audio,
                 other_audio, bass_audio, effects_audio, speech_audio, bleed_audio, music_audio,
                 dry_audio, male_audio, female_audio,
+                mid_audio, side_audio,
                 separation_process_status, separation_progress_html
             ]
         )
