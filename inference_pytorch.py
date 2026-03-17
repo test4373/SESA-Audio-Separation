@@ -24,7 +24,7 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(current_dir)
 
 from utils import get_model_from_config, normalize_audio, denormalize_audio
-from utils import prefer_target_instrument, load_start_checkpoint
+from utils import prefer_target_instrument, load_start_checkpoint, apply_tta, demix
 from pytorch_backend import PyTorchBackend, PyTorchOptimizer, create_inference_session
 
 import warnings
@@ -186,7 +186,7 @@ def demix_pytorch_optimized(
     return ret_data
 
 
-def run_folder_pytorch_optimized(backend, args, config, device, verbose: bool = False):
+def run_folder_pytorch_optimized(backend, args, config, device, model=None, verbose: bool = False):
     """
     ULTRA-OPTIMIZED PyTorch backend ile klasör işleme.
     """
@@ -225,6 +225,28 @@ def run_folder_pytorch_optimized(backend, args, config, device, verbose: bool = 
         # Use optimized PyTorch backend
         waveforms_orig = demix_pytorch_optimized(config, backend, mix, device, pbar=detailed_pbar)
         
+        if args.use_tta and model is not None:
+            waveforms_orig = apply_tta(config, model, mix, waveforms_orig, device, args.model_type)
+
+        if args.demud_phaseremix_inst and model is not None:
+            print(f"DemudPhaseRemix: {path}")
+            instr = 'vocals' if 'vocals' in instruments else instruments[0]
+            instruments.append('instrumental_phaseremix')
+            if 'instrumental' not in instruments and 'Instrumental' not in instruments:
+                mix_modified = mix_orig - 2 * waveforms_orig[instr]
+                mix_modified_ = mix_modified.copy()
+                waveforms_modified = demix(config, model, mix_modified, device, model_type=args.model_type)
+                if args.use_tta:
+                    waveforms_modified = apply_tta(config, model, mix_modified, waveforms_modified, device, args.model_type)
+                waveforms_orig['instrumental_phaseremix'] = mix_orig + waveforms_modified[instr]
+            else:
+                mix_modified = 2 * waveforms_orig[instr] - mix_orig
+                mix_modified_ = mix_modified.copy()
+                waveforms_modified = demix(config, model, mix_modified, device, model_type=args.model_type)
+                if args.use_tta:
+                    waveforms_modified = apply_tta(config, model, mix_modified, waveforms_orig, device, args.model_type)
+                waveforms_orig['instrumental_phaseremix'] = mix_orig + mix_modified_ - waveforms_modified[instr]
+
         if args.extract_instrumental:
             instr = 'vocals' if 'vocals' in instruments else instruments[0]
             waveforms_orig['instrumental'] = mix_orig - waveforms_orig[instr]
@@ -277,6 +299,8 @@ def proc_folder_pytorch_optimized(args):
     parser.add_argument("--enable_tf32", action='store_true', help="Enable TF32 for RTX 30xx+ (faster)")
     parser.add_argument("--enable_cudnn_benchmark", action='store_true', help="Enable cuDNN benchmark (faster after warmup)")
     parser.add_argument("--lora_checkpoint", type=str, default='', help="Initial checkpoint to LoRA weights")
+    parser.add_argument("--use_tta", action='store_true', help="Test Time Augmentation (flips + polarity)")
+    parser.add_argument("--demud_phaseremix_inst", action='store_true', help="DemudPhaseRemix instrumental extraction")
     
     if args is None:
         args = parser.parse_args()
@@ -363,8 +387,8 @@ Common causes:
     
     print(i18n("model_load_time").format(time.time() - model_load_start_time))
     
-    # Run inference
-    run_folder_pytorch_optimized(backend, args, config, device, verbose=False)
+    # Run inference (pass raw model for TTA/demud support)
+    run_folder_pytorch_optimized(backend, args, config, device, model=model, verbose=False)
 
 
 if __name__ == "__main__":
