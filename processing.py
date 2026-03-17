@@ -88,13 +88,13 @@ def setup_directories():
                     drive.mount('/content/drive', force_remount=True)
                 except AttributeError as ae:
                     # Handle 'NoneType' object has no attribute 'kernel' error
-                    print(f"⚠️ Google Drive mount skipped (Colab kernel issue): {str(ae)}")
+                    print(f"Warning: Google Drive mount skipped (Colab kernel issue): {str(ae)}")
                     print("Continuing with local storage...")
                 except Exception as mount_error:
-                    print(f"⚠️ Google Drive mount failed: {str(mount_error)}")
+                    print(f"Warning: Google Drive mount failed: {str(mount_error)}")
                     print("Continuing with local storage...")
         except Exception as e:
-            print(f"⚠️ Google Drive setup error: {str(e)}")
+            print(f"Warning: Google Drive setup error: {str(e)}")
             print("Continuing without Google Drive...")
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     os.makedirs(INPUT_DIR, exist_ok=True)
@@ -133,7 +133,7 @@ def update_progress_html(progress_label, progress_percent, download_info=None):
         dl_percent = clamp_percentage(download_info.get('percent', 0))
         download_html = f"""
         <div style="margin-top: 8px; padding: 8px; background: rgba(0,0,0,0.3); border-radius: 5px;">
-            <div style="font-size: 0.85rem; color: #a0a0a0; margin-bottom: 4px;">📥 {dl_filename} - %{int(dl_percent)}</div>
+            <div style="font-size: 0.85rem; color: #a0a0a0; margin-bottom: 4px;">{dl_filename} - %{int(dl_percent)}</div>
             <div style="width: 100%; background-color: #333; border-radius: 4px; overflow: hidden;">
                 <div style="width: {dl_percent}%; height: 14px; background: linear-gradient(90deg, #4ade80, #22d3ee); transition: width 0.3s ease-out; border-radius: 4px;"></div>
             </div>
@@ -250,11 +250,11 @@ def run_command_and_process_files(
         if PYTORCH_OPTIMIZED_AVAILABLE:
             from inference_pytorch import INFERENCE_PATH as PYTORCH_INFERENCE_PATH
             inference_script = PYTORCH_INFERENCE_PATH if os.path.exists(PYTORCH_INFERENCE_PATH) else INFERENCE_PATH
-            print(f"🔥 Using ULTRA-OPTIMIZED PyTorch backend (mode: {optimize_mode})")
-            print(f"   ⚡ AMP: {enable_amp} | 🎯 TF32: {enable_tf32} | ⚙️ cuDNN: {enable_cudnn_benchmark}")
+            print(f"Using PyTorch backend (mode: {optimize_mode})")
+            print(f"   AMP: {enable_amp} | TF32: {enable_tf32} | cuDNN: {enable_cudnn_benchmark}")
         else:
             inference_script = INFERENCE_PATH
-            print("⚠️ PyTorch optimized backend not available, using standard inference")
+            print("Warning: PyTorch optimized backend not available, using standard inference")
         
 
 
@@ -330,7 +330,7 @@ def run_command_and_process_files(
                     dl_info = line_stripped.replace("[SESA_DOWNLOAD]", "")
                     if dl_info.startswith("START:"):
                         downloading_file = dl_info.replace("START:", "")
-                        yield {"progress": 0, "status": f"📥 Model indiriliyor: {downloading_file}", "outputs": None}
+                        yield {"progress": 0, "status": f"Model indiriliyor: {downloading_file}", "outputs": None}
                     elif dl_info.startswith("END:"):
                         downloading_file = None
                     elif ":" in dl_info:
@@ -338,7 +338,7 @@ def run_command_and_process_files(
                         if len(parts) == 2:
                             filename, percent_str = parts
                             download_percent = int(percent_str)
-                            yield {"progress": 0, "status": f"📥 İndiriliyor: {filename} - %{download_percent}", "outputs": None}
+                            yield {"progress": 0, "status": f"İndiriliyor: {filename} - %{download_percent}", "outputs": None}
                 except (ValueError, TypeError):
                     pass
             # Check for [SESA_PROGRESS] prefix from inference script
@@ -367,7 +367,7 @@ def run_command_and_process_files(
             stderr_output += line
             line_s = line.strip()
             if line_s and ("error" in line_s.lower() or "warning" in line_s.lower() or "traceback" in line_s.lower()):
-                print(f"⚠️ {line_s}")
+                print(f"Warning: {line_s}")
         
         process.wait()
         
@@ -390,7 +390,7 @@ def run_command_and_process_files(
                     continue
                 base, ext = os.path.splitext(filename)
                 detected_type = None
-                for type_key in ['vocals', 'instrumental', 'instrument', 'phaseremix', 'drum', 'bass', 'other', 'effects', 'speech', 'music', 'dry', 'male', 'female', 'bleed', 'karaoke']:
+                for type_key in ['vocals', 'instrumental', 'instrument', 'phaseremix', 'drum', 'bass', 'other', 'effects', 'speech', 'music', 'dry', 'male', 'female', 'bleed', 'karaoke', 'mid', 'side']:
                     if type_key in base.lower():
                         detected_type = type_key
                         break
@@ -402,7 +402,7 @@ def run_command_and_process_files(
                 try:
                     os.rename(file_path, new_file_path)
                 except Exception as e:
-                    print(f"⚠️ Dosya yeniden adlandırılamadı: {os.path.basename(file_path)} -> {os.path.basename(new_file_path)}: {str(e)}")
+                    print(f"Dosya yeniden adlandırılamadı: {os.path.basename(file_path)} -> {os.path.basename(new_file_path)}: {str(e)}")
 
         rename_files_with_model(OUTPUT_DIR, filename_model)
 
@@ -424,7 +424,8 @@ def run_command_and_process_files(
             find_file('vocals'), find_file(['instrumental', 'instrument']), find_file('phaseremix'),
             find_file('drum'), find_file('bass'), find_file('other'), find_file('effects'),
             find_file('speech'), find_file('music'), find_file('dry'), find_file('male'),
-            find_file('female'), find_file('bleed'), find_file('karaoke')
+            find_file('female'), find_file('bleed'), find_file('karaoke'),
+            find_file('mid'), find_file('side')
         ]
 
         normalized_outputs = []
@@ -464,12 +465,12 @@ def run_command_and_process_files(
 
     except subprocess.CalledProcessError as e:
         print(f"Subprocess failed, code: {e.returncode}: {e.stderr}")
-        yield {"progress": 0, "status": f"Error: {e.stderr}", "outputs": (None,) * 14}
+        yield {"progress": 0, "status": f"Error: {e.stderr}", "outputs": (None,) * 16}
     except Exception as e:
         print(f"run_command_and_process_files error: {str(e)}")
         import traceback
         traceback.print_exc()
-        yield {"progress": 0, "status": f"Error: {str(e)}", "outputs": (None,) * 14}
+        yield {"progress": 0, "status": f"Error: {str(e)}", "outputs": (None,) * 16}
 
 
 
@@ -535,7 +536,7 @@ def process_audio(
             audio_path = input_audio_file.name if hasattr(input_audio_file, 'name') else input_audio_file
         else:
             yield (
-                None, None, None, None, None, None, None, None, None, None, None, None, None, None,
+                None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None,
                 "No audio file provided",
                 update_progress_html("No input provided", 0)
             )
@@ -547,7 +548,7 @@ def process_audio(
 
         # Clean model name, remove ⭐ and other unwanted characters
         clean_model_name = clean_model(model) if not model.startswith("/") else extract_model_name_from_checkpoint(model)
-        print(f"🎵 Processing: {os.path.basename(audio_path)} | Model: {clean_model_name}")
+        print(f"Processing: {os.path.basename(audio_path)} | Model: {clean_model_name}")
 
         # Validate inference parameters
         try:
@@ -590,8 +591,8 @@ def process_audio(
 
         # Yield status for model loading
         yield (
-            None, None, None, None, None, None, None, None, None, None, None, None, None, None,
-            f"📥 Loading model: {clean_model_name}...",
+            None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None,
+            f"Loading model: {clean_model_name}...",
             update_progress_html(f"Loading model: {clean_model_name}", 0)
         )
         
@@ -628,7 +629,7 @@ def process_audio(
                 outputs = update["outputs"]
             # Yield progress update to Gradio
             yield (
-                None, None, None, None, None, None, None, None, None, None, None, None, None, None,
+                None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None,
                 update["status"],
                 update_progress_html(update["status"], update["progress"])
             )
@@ -640,7 +641,7 @@ def process_audio(
         if use_matchering:
             # Yield progress update for Matchering
             yield (
-                None, None, None, None, None, None, None, None, None, None, None, None, None, None,
+                None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None,
                 "Applying Matchering...",
                 update_progress_html("Applying Matchering...", 90)
             )
@@ -677,6 +678,7 @@ def process_audio(
         yield (
             outputs[0], outputs[1], outputs[2], outputs[3], outputs[4], outputs[5], outputs[6],
             outputs[7], outputs[8], outputs[9], outputs[10], outputs[11], outputs[12], outputs[13],
+            outputs[14], outputs[15],
             "Audio processing completed",
             update_progress_html("Audio processing completed", 100)
         )
@@ -686,7 +688,7 @@ def process_audio(
         import traceback
         traceback.print_exc()
         yield (
-            None, None, None, None, None, None, None, None, None, None, None, None, None, None,
+            None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None,
             f"Error occurred: {str(e)}",
             update_progress_html("Error occurred", 0)
         )
@@ -898,7 +900,7 @@ def auto_ensemble_process(
                         dl_info = line_stripped.replace("[SESA_DOWNLOAD]", "")
                         if dl_info.startswith("START:"):
                             downloading_file = dl_info.replace("START:", "")
-                            yield None, f"📥 İndiriliyor: {downloading_file}", update_progress_html(
+                            yield None, f"İndiriliyor: {downloading_file}", update_progress_html(
                                 f"Model indiriliyor: {downloading_file}",
                                 i * model_progress_per_step,
                                 download_info={"filename": downloading_file, "percent": 0}
@@ -910,7 +912,7 @@ def auto_ensemble_process(
                             if len(parts) == 2:
                                 filename, percent_str = parts
                                 download_percent = int(percent_str)
-                                yield None, f"📥 İndiriliyor: {filename} - %{download_percent}", update_progress_html(
+                                yield None, f"İndiriliyor: {filename} - %{download_percent}", update_progress_html(
                                     f"Model indiriliyor: {filename}",
                                     i * model_progress_per_step,
                                     download_info={"filename": filename, "percent": download_percent}
