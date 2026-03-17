@@ -1,241 +1,239 @@
+# coding: utf-8
+__author__ = 'Roman Solovyev (ZFTurbo): https://github.com/ZFTurbo/'
+
+import argparse
+import time
+import librosa
+from tqdm.auto import tqdm
+import sys
 import os
-import re
-import validators
-import yt_dlp
-import requests
-import shutil
-try:
-    import gdown
-except ImportError:
-    os.system('pip install gdown')
-    import gdown
+import glob
+import torch
+import soundfile as sf
+import torch.nn as nn
+import numpy as np
+from assets.i18n.i18n import I18nAuto
+
+# Colab kontrolü
 try:
     from google.colab import drive
+    IS_COLAB = True
 except ImportError:
-    drive = None
-from helpers import INPUT_DIR, COOKIE_PATH, clear_directory, clear_temp_folder, BASE_DIR
-import yaml
-from assets.i18n.i18n import I18nAuto
+    IS_COLAB = False
 
 i18n = I18nAuto()
 
-def sanitize_filename(filename):
-    sanitized = re.sub(r'[^a-zA-Z0-9_-]', '_', filename)
-    sanitized = re.sub(r'_+', '_', sanitized)
-    sanitized = sanitized.strip('_')
-    return sanitized
+current_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(current_dir)
 
-def download_callback(url, download_type='direct', cookie_file=None):
-    # Clear temporary and input directories
-    clear_temp_folder("/tmp", exclude_items=["gradio", "config.json"])
-    clear_directory(INPUT_DIR)
-    os.makedirs(INPUT_DIR, exist_ok=True)
+from utils import demix, get_model_from_config, normalize_audio, denormalize_audio
+from utils import prefer_target_instrument, apply_tta, load_start_checkpoint, load_lora_weights
 
-    # Validate URL
-    if not url or not isinstance(url, str) or not (url.startswith('http://') or url.startswith('https://')):
-        return None, i18n("invalid_url"), None, None, None, None
+# PyTorch optimized backend (always available)
+try:
+    from pytorch_backend import PyTorchBackend
+    PYTORCH_OPTIMIZED_AVAILABLE = True
+except ImportError:
+    PYTORCH_OPTIMIZED_AVAILABLE = False
 
-    # Load cookie file
-    if cookie_file is not None:
-        try:
-            with open(cookie_file.name, "rb") as f:
-                cookie_content = f.read()
-            with open(COOKIE_PATH, "wb") as f:
-                f.write(cookie_content)
-            print(i18n("cookie_file_updated"))
-        except Exception as e:
-            print(i18n("cookie_installation_error").format(str(e)))
+import warnings
+warnings.filterwarnings("ignore")
 
-    wav_path = None
-    download_success = False
-    drive_mounted = False
+def shorten_filename(filename, max_length=30):
+    """Dosya adını belirtilen maksimum uzunluğa kısaltır."""
+    base, ext = os.path.splitext(filename)
+    if len(base) <= max_length:
+        return filename
+    shortened = base[:15] + "..." + base[-10:] + ext
+    return shortened
 
-    # Mount Google Drive (optional)
-    if drive is not None:
-        try:
-            # Check if already mounted first
-            if os.path.exists('/content/drive/MyDrive'):
-                drive_mounted = True
-            else:
-                drive.mount('/content/drive', force_remount=True)
-                drive_mounted = True
-        except AttributeError as ae:
-            # Handle 'NoneType' object has no attribute 'kernel' error
-            print(f"Warning: Google Drive mount skipped (Colab kernel issue): {str(ae)}")
-            print(i18n("continuing_without_google_drive"))
-        except Exception as e:
-            print(i18n("google_drive_mount_error").format(str(e)))
-            print(i18n("continuing_without_google_drive"))
+def get_soundfile_subtype(pcm_type, is_float=False):
+    """PCM türüne göre uygun soundfile alt türünü belirler."""
+    if is_float:
+        return 'FLOAT'
+    subtype_map = {
+        'PCM_16': 'PCM_16',
+        'PCM_24': 'PCM_24',
+        'FLOAT': 'FLOAT'
+    }
+    return subtype_map.get(pcm_type, 'FLOAT')
 
-    # 1. Direct file links
-    if any(url.endswith(ext) for ext in ['.wav', '.mp3', '.m4a', '.ogg', '.flac']):
-        try:
-            file_name = os.path.basename(url.split('?')[0])
-            sanitized_base_name = sanitize_filename(os.path.splitext(file_name)[0])
-            output_path = os.path.join(INPUT_DIR, f"{sanitized_base_name}{os.path.splitext(file_name)[1]}")
-            response = requests.get(url, stream=True)
-            if response.status_code == 200:
-                with open(output_path, 'wb') as f:
-                    for chunk in response.iter_content(chunk_size=8192):
-                        if chunk:
-                            f.write(chunk)
-                if not file_name.endswith('.wav'):
-                    wav_output = os.path.splitext(output_path)[0] + '.wav'
-                    os.system(f'ffmpeg -i "{output_path}" -acodec pcm_s16le -ar 44100 "{wav_output}"')
-                    if os.path.exists(wav_output):
-                        os.remove(output_path)
-                        output_path = wav_output
-                if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
-                    wav_path = output_path
-                    download_success = True
-                else:
-                    raise Exception(i18n("file_size_zero_error"))
-            else:
-                raise Exception(i18n("direct_download_failed"))
-        except Exception as e:
-            error_msg = i18n("direct_download_error").format(str(e))
-            print(error_msg)
-            return None, error_msg, None, None, None, None
+def run_folder(model, args, config, device, verbose: bool = False):
+    start_time = time.time()
+    model.eval()
 
-    # 2. Google Drive links
-    elif 'drive.google.com' in url:
-        try:
-            file_id = re.search(r'/d/([^/]+)', url) or re.search(r'id=([^&]+)', url)
-            if not file_id:
-                raise ValueError(i18n("invalid_google_drive_url"))
-            file_id = file_id.group(1)
-            output_path = os.path.join(INPUT_DIR, "drive_download.wav")
-            gdown.download(f'https://drive.google.com/uc?id={file_id}', output_path, quiet=True)
-            if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
-                sanitized_base_name = sanitize_filename("drive_download")
-                sanitized_output_path = os.path.join(INPUT_DIR, f"{sanitized_base_name}.wav")
-                os.rename(output_path, sanitized_output_path)
-                wav_path = sanitized_output_path
-                download_success = True
-            else:
-                raise Exception(i18n("file_size_zero_error"))
-        except Exception as e:
-            error_msg = i18n("google_drive_error").format(str(e))
-            print(error_msg)
-            return None, error_msg, None, None, None, None
+    mixture_paths = sorted(glob.glob(os.path.join(args.input_folder, '*.*')))
+    sample_rate = getattr(config.audio, 'sample_rate', 44100)
 
-    # 3. YouTube and other media links
+    print(i18n("total_files_found").format(len(mixture_paths), sample_rate))
+
+    instruments = prefer_target_instrument(config)[:]
+
+    # Çıktı klasörünü kullan (processing.py tarafından ayarlandı)
+    store_dir = args.store_dir
+    os.makedirs(store_dir, exist_ok=True)
+
+    if not verbose:
+        mixture_paths = tqdm(mixture_paths, desc=i18n("total_progress"))
     else:
-        # First try: iOS/Android without cookies (best for bot protection bypass)
-        ydl_opts_nocookie = {
-            'format': 'ba[ext=m4a]/ba[ext=webm]/ba/b',
-            'outtmpl': os.path.join(INPUT_DIR, '%(title)s.%(ext)s'),
-            'postprocessors': [{
-                'key': 'FFmpegExtractAudio',
-                'preferredcodec': 'wav',
-                'preferredquality': '0'
-            }],
-            'nocheckcertificate': True,
-            'ignoreerrors': False,
-            'retries': 3,
-            'extractor_retries': 3,
-            'extractor_args': {
-                'youtube': {
-                    'player_client': ['ios', 'android'],
-                    'player_skip': ['webpage', 'configs']
-                }
-            },
-            'http_headers': {
-                'User-Agent': 'com.google.ios.youtube/19.09.3 (iPhone14,3; U; CPU iOS 15_6 like Mac OS X)',
-                'Accept-Language': 'en-US,en;q=0.9'
-            }
-        }
-        
-        # Second try: web client with cookies if available
-        ydl_opts_cookie = {
-            'format': 'ba[ext=m4a]/ba[ext=webm]/ba/b',
-            'outtmpl': os.path.join(INPUT_DIR, '%(title)s.%(ext)s'),
-            'postprocessors': [{
-                'key': 'FFmpegExtractAudio',
-                'preferredcodec': 'wav',
-                'preferredquality': '0'
-            }],
-            'cookiefile': COOKIE_PATH,
-            'nocheckcertificate': True,
-            'ignoreerrors': False,
-            'retries': 3,
-            'extractor_retries': 3,
-            'extractor_args': {
-                'youtube': {
-                    'player_client': ['web', 'tv_embedded'],
-                    'player_skip': ['configs']
-                }
-            }
-        }
-        
-        # Try without cookies first
-        info_dict = None
-        temp_path = None
-        
-        try:
-            with yt_dlp.YoutubeDL(ydl_opts_nocookie) as ydl:
-                info_dict = ydl.extract_info(url, download=True)
-                if info_dict:
-                    temp_path = ydl.prepare_filename(info_dict)
-        except Exception as e:
-            # If no cookies available or first method failed, try with cookies
-            if os.path.exists(COOKIE_PATH):
-                print(f"First attempt failed, trying with cookies...")
-                try:
-                    with yt_dlp.YoutubeDL(ydl_opts_cookie) as ydl:
-                        info_dict = ydl.extract_info(url, download=True)
-                        if info_dict:
-                            temp_path = ydl.prepare_filename(info_dict)
-                except Exception as e2:
-                    raise e2
-            else:
-                raise e
-        
-        try:
-            # Check if extraction was successful
-            if info_dict is None:
-                raise Exception(i18n("youtube_extraction_failed") if "youtube_extraction_failed" in dir(i18n) else "YouTube extraction failed. Please try updating yt-dlp: pip install -U yt-dlp")
-            
-            base_name = os.path.splitext(os.path.basename(temp_path))[0]
-            sanitized_base_name = sanitize_filename(base_name)
-            wav_path = os.path.join(INPUT_DIR, f"{sanitized_base_name}.wav")
-            temp_wav = os.path.splitext(temp_path)[0] + '.wav'
-            if os.path.exists(temp_wav):
-                os.rename(temp_wav, wav_path)
-                download_success = True
-            else:
-                raise Exception(i18n("wav_conversion_failed"))
-        except Exception as e:
-            error_msg = i18n("download_error").format(str(e))
-            # Add hint for yt-dlp update if it's a YouTube issue
-            if 'youtube' in url.lower() or 'youtu.be' in url.lower():
-                error_msg += "\n\nTry: pip install -U yt-dlp"
-            print(error_msg)
-            return None, error_msg, None, None, None, None
+        mixture_paths = mixture_paths
 
-    # Post-download processing
-    if download_success and wav_path:
-        for f in os.listdir(INPUT_DIR):
-            if f != os.path.basename(wav_path):
-                os.remove(os.path.join(INPUT_DIR, f))
-        
-        if drive_mounted:
-            try:
-                drive_path = os.path.join('/content/drive/My Drive', os.path.basename(wav_path))
-                shutil.copy(wav_path, drive_path)
-                print(i18n("file_copied_to_drive").format(drive_path))
-            except Exception as e:
-                print(i18n("copy_to_drive_error").format(str(e)))
-        else:
-            print(i18n("skipping_drive_copy_no_mount"))
+    detailed_pbar = not args.disable_detailed_pbar
+    print(i18n("detailed_pbar_enabled").format(detailed_pbar))
 
-        return (
-            wav_path,
-            i18n("download_success"),
-            wav_path,
-            wav_path,
-            wav_path,
-            wav_path
-        )
+    for path in mixture_paths:
+        try:
+            mix, sr = librosa.load(path, sr=sample_rate, mono=False)
+            print(i18n("loaded_audio").format(path, mix.shape))
+        except Exception as e:
+            print(i18n("cannot_read_track").format(path))
+            print(i18n("error_message").format(str(e)))
+            continue
+
+        mix_orig = mix.copy()
+        if 'normalize' in config.inference:
+            if config.inference['normalize'] is True:
+                mix, norm_params = normalize_audio(mix)
+
+        waveforms_orig = demix(config, model, mix, device, model_type=args.model_type, pbar=detailed_pbar)
+
+        if args.use_tta:
+            waveforms_orig = apply_tta(config, model, mix, waveforms_orig, device, args.model_type)
+
+        if args.demud_phaseremix_inst:
+            print(i18n("demudding_track").format(path))
+            instr = 'vocals' if 'vocals' in instruments else instruments[0]
+            instruments.append('instrumental_phaseremix')
+            if 'instrumental' not in instruments and 'Instrumental' not in instruments:
+                mix_modified = mix_orig - 2*waveforms_orig[instr]
+                mix_modified_ = mix_modified.copy()
+                waveforms_modified = demix(config, model, mix_modified, device, model_type=args.model_type, pbar=detailed_pbar)
+                if args.use_tta:
+                    waveforms_modified = apply_tta(config, model, mix_modified, waveforms_modified, device, args.model_type)
+                waveforms_orig['instrumental_phaseremix'] = mix_orig + waveforms_modified[instr]
+            else:
+                mix_modified = 2*waveforms_orig[instr] - mix_orig
+                mix_modified_ = mix_modified.copy()
+                waveforms_modified = demix(config, model, mix_modified, device, model_type=args.model_type, pbar=detailed_pbar)
+                if args.use_tta:
+                    waveforms_modified = apply_tta(config, model, mix_modified, waveforms_orig, device, args.model_type)
+                waveforms_orig['instrumental_phaseremix'] = mix_orig + mix_modified_ - waveforms_modified[instr]
+
+        if args.extract_instrumental:
+            instr = 'vocals' if 'vocals' in instruments else instruments[0]
+            waveforms_orig['instrumental'] = mix_orig - waveforms_orig[instr]
+            if 'instrumental' not in instruments:
+                instruments.append('instrumental')
+
+        for instr in instruments:
+            estimates = waveforms_orig[instr]
+            if 'normalize' in config.inference:
+                if config.inference['normalize'] is True:
+                    estimates = denormalize_audio(estimates, norm_params)
+
+            is_float = getattr(args, 'export_format', '').startswith('wav FLOAT')
+            codec = 'flac' if getattr(args, 'flac_file', False) else 'wav'
+            if codec == 'flac':
+                subtype = get_soundfile_subtype(args.pcm_type, is_float)
+            else:
+                subtype = get_soundfile_subtype('FLOAT', is_float)
+
+            shortened_filename = shorten_filename(os.path.basename(path))
+            output_filename = f"{shortened_filename}_{instr}.{codec}"
+            output_path = os.path.join(store_dir, output_filename)
+            sf.write(output_path, estimates.T, sr, subtype=subtype)
+
+    print(i18n("elapsed_time").format(time.time() - start_time))
+
+def proc_folder(args, use_tensorrt=False):
+    """
+    Process folder with optional TensorRT backend.
     
-    return None, i18n("download_failed"), None, None, None, None
+    Parameters:
+    ----------
+    args : list or None
+        Command line arguments
+    use_tensorrt : bool
+        Use TensorRT backend if available
+    """
+    parser = argparse.ArgumentParser(description=i18n("proc_folder_description"))
+    parser.add_argument("--model_type", type=str, default='mdx23c', help=i18n("model_type_help"))
+    parser.add_argument("--config_path", type=str, help=i18n("config_path_help"))
+    parser.add_argument("--demud_phaseremix_inst", action='store_true', help=i18n("demud_phaseremix_help"))
+    parser.add_argument("--start_check_point", type=str, default='', help=i18n("start_checkpoint_help"))
+    parser.add_argument("--input_folder", type=str, help=i18n("input_folder_help"))
+    parser.add_argument("--audio_path", type=str, help=i18n("audio_path_help"))
+    parser.add_argument("--store_dir", type=str, default="", help=i18n("store_dir_help"))
+    parser.add_argument("--device_ids", nargs='+', type=int, default=0, help=i18n("device_ids_help"))
+    parser.add_argument("--extract_instrumental", action='store_true', help=i18n("extract_instrumental_help"))
+    parser.add_argument("--disable_detailed_pbar", action='store_true', help=i18n("disable_detailed_pbar_help"))
+    parser.add_argument("--force_cpu", action='store_true', help=i18n("force_cpu_help"))
+    parser.add_argument("--flac_file", action='store_true', help=i18n("flac_file_help"))
+    parser.add_argument("--export_format", type=str, choices=['wav FLOAT', 'flac PCM_16', 'flac PCM_24'], default='flac PCM_24', help=i18n("export_format_help"))
+    parser.add_argument("--pcm_type", type=str, choices=['PCM_16', 'PCM_24'], default='PCM_24', help=i18n("pcm_type_help"))
+    parser.add_argument("--use_tta", action='store_true', help=i18n("use_tta_help"))
+    parser.add_argument("--lora_checkpoint", type=str, default='', help=i18n("lora_checkpoint_help"))
+    parser.add_argument("--chunk_size", type=int, default=1000000, help="Inference chunk size")
+    parser.add_argument("--overlap", type=int, default=4, help="Inference overlap factor")
+    parser.add_argument("--optimize_mode", type=str, choices=['default', 'compile', 'jit', 'channels_last'], default='channels_last', help="PyTorch optimization mode (always enabled)")
+    parser.add_argument("--enable_amp", action='store_true', default=True, help="Enable automatic mixed precision")
+    parser.add_argument("--enable_tf32", action='store_true', default=True, help="Enable TF32 (Ampere GPUs)")
+    parser.add_argument("--enable_cudnn_benchmark", action='store_true', default=True, help="Enable cuDNN benchmark")
+
+    if args is None:
+        args = parser.parse_args()
+    else:
+        args = parser.parse_args(args)
+
+    device = "cpu"
+    if args.force_cpu:
+        device = "cpu"
+    elif torch.cuda.is_available():
+        print(i18n("cuda_available"))
+        device = f'cuda:{args.device_ids[0]}' if type(args.device_ids) == list else f'cuda:{args.device_ids}'
+    elif torch.backends.mps.is_available():
+         device = "mps"
+
+    print(i18n("using_device").format(device))
+
+    model_load_start_time = time.time()
+    torch.backends.cudnn.benchmark = True
+
+    model, config = get_model_from_config(args.model_type, args.config_path)
+
+    if args.start_check_point != '':
+        load_start_checkpoint(args, model, type_='inference')
+
+    print(i18n("instruments_print").format(config.training.instruments))
+
+    if type(args.device_ids) == list and len(args.device_ids) > 1 and not args.force_cpu:
+        model = nn.DataParallel(model, device_ids=args.device_ids)
+
+    model = model.to(device)
+
+    print(i18n("model_load_time").format(time.time() - model_load_start_time))
+
+    # Always use optimized PyTorch backend if available
+    if PYTORCH_OPTIMIZED_AVAILABLE:
+        print(f"Using optimized PyTorch backend")
+        print(f"   Mode: {args.optimize_mode}")
+        print(f"   AMP: {args.enable_amp} | TF32: {args.enable_tf32} | cuDNN: {args.enable_cudnn_benchmark}")
+        from inference_pytorch import proc_folder_pytorch_optimized
+        # Recreate args for optimized PyTorch inference
+        sys.argv = sys.argv[:1]  # Keep only script name
+        for key, value in vars(args).items():
+            if value is not None and value is not False:
+                if isinstance(value, bool):
+                    sys.argv.append(f"--{key}")
+                elif isinstance(value, list):
+                    sys.argv.append(f"--{key}")
+                    sys.argv.extend(map(str, value))
+                else:
+                    sys.argv.extend([f"--{key}", str(value)])
+        proc_folder_pytorch_optimized(None)
+    else:
+        print("Warning: PyTorch optimized backend not available, using standard inference")
+        run_folder(model, args, config, device, verbose=False)
+
+if __name__ == "__main__":
+    proc_folder(None)
