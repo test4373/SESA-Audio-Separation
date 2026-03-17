@@ -282,32 +282,32 @@ def create_interface():
                                     )
 
                             with gr.Accordion(i18n("backend_settings"), open=True) as backend_settings_accordion:
-                                gr.Markdown(f"### {i18n('inference_backend')} - PyTorch")
-                                gr.Markdown("**Varsayılan olarak aktif**")
+                                gr.Markdown(f"### {i18n('inference_backend')} - {i18n('ultra_optimized_pytorch')}")
+                                gr.Markdown(f"**{i18n('default_active_max_speed')}**")
                                 
                                 with gr.Row():
                                     optimize_mode = gr.Dropdown(
-                                        label="Optimization Mode",
+                                        label=i18n("optimization_mode"),
                                         choices=['channels_last', 'compile', 'default'],
                                         value=initial_settings.get("optimize_mode", "channels_last"),
-                                        info="channels_last: RTX GPUs için en hızlı | compile: PyTorch 2.0+ için ekstra hız | default: Standart"
+                                        info=f"channels_last: {i18n('channels_last_mode')} | compile: {i18n('compile_mode')} | default: {i18n('default_mode')}"
                                     )
                                 
                                 with gr.Row():
                                     enable_amp = gr.Checkbox(
-                                        label="Mixed Precision (AMP)",
+                                        label=i18n("mixed_precision_amp"),
                                         value=initial_settings.get("enable_amp", True),
-                                        info="2x daha hızlı inference - önerilir"
+                                        info=i18n("mixed_precision_info")
                                     )
                                     enable_tf32 = gr.Checkbox(
-                                        label="TF32 Acceleration",
+                                        label=i18n("tf32_acceleration"),
                                         value=initial_settings.get("enable_tf32", True),
-                                        info="RTX 30xx+ için ekstra hız artışı"
+                                        info=i18n("tf32_acceleration_info")
                                     )
                                     enable_cudnn_benchmark = gr.Checkbox(
-                                        label="cuDNN Benchmark",
+                                        label=i18n("cudnn_benchmark"),
                                         value=initial_settings.get("enable_cudnn_benchmark", True),
-                                        info="İlk çalışmada yavaş, sonraki çalışmalarda çok hızlı"
+                                        info=i18n("cudnn_benchmark_info")
                                     )
 
                             with gr.Row():
