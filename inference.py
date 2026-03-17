@@ -215,9 +215,9 @@ def proc_folder(args, use_tensorrt=False):
 
     # Always use optimized PyTorch backend if available
     if PYTORCH_OPTIMIZED_AVAILABLE:
-        print(f"\n🔥 Using ULTRA-OPTIMIZED PyTorch backend")
-        print(f"   🚀 Mode: {args.optimize_mode}")
-        print(f"   ⚡ AMP: {args.enable_amp} | 🎯 TF32: {args.enable_tf32} | ⚙️ cuDNN: {args.enable_cudnn_benchmark}")
+        print(f"Using optimized PyTorch backend")
+        print(f"   Mode: {args.optimize_mode}")
+        print(f"   AMP: {args.enable_amp} | TF32: {args.enable_tf32} | cuDNN: {args.enable_cudnn_benchmark}")
         from inference_pytorch import proc_folder_pytorch_optimized
         # Recreate args for optimized PyTorch inference
         sys.argv = sys.argv[:1]  # Keep only script name
@@ -232,7 +232,7 @@ def proc_folder(args, use_tensorrt=False):
                     sys.argv.extend([f"--{key}", str(value)])
         proc_folder_pytorch_optimized(None)
     else:
-        print("⚠️ PyTorch optimized backend not available, using standard inference")
+        print("Warning: PyTorch optimized backend not available, using standard inference")
         run_folder(model, args, config, device, verbose=False)
 
 if __name__ == "__main__":
