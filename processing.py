@@ -13,7 +13,7 @@ sys.path.append(current_dir)
 
 from datetime import datetime
 from helpers import INPUT_DIR, OLD_OUTPUT_DIR, ENSEMBLE_DIR, AUTO_ENSEMBLE_TEMP, move_old_files, clear_directory, BASE_DIR, clean_model, extract_model_name_from_checkpoint, sanitize_filename, find_clear_segment, save_segment, run_matchering, clamp_percentage
-from model import get_model_config
+from model import get_model_config, get_model_chunk_size
 from apollo_processing import process_with_apollo  # Import Apollo processing
 import torch
 
@@ -330,7 +330,7 @@ def run_command_and_process_files(
                     dl_info = line_stripped.replace("[SESA_DOWNLOAD]", "")
                     if dl_info.startswith("START:"):
                         downloading_file = dl_info.replace("START:", "")
-                        yield {"progress": 0, "status": f"Model indiriliyor: {downloading_file}", "outputs": None}
+                        yield {"progress": 0, "status": i18n("downloading_model_file").format(downloading_file), "outputs": None}
                     elif dl_info.startswith("END:"):
                         downloading_file = None
                     elif ":" in dl_info:
@@ -338,7 +338,7 @@ def run_command_and_process_files(
                         if len(parts) == 2:
                             filename, percent_str = parts
                             download_percent = int(percent_str)
-                            yield {"progress": 0, "status": f"İndiriliyor: {filename} - %{download_percent}", "outputs": None}
+                            yield {"progress": 0, "status": i18n("downloading_file_progress").format(filename, download_percent), "outputs": None}
                 except (ValueError, TypeError):
                     pass
             # Check for [SESA_PROGRESS] prefix from inference script
@@ -402,7 +402,7 @@ def run_command_and_process_files(
                 try:
                     os.rename(file_path, new_file_path)
                 except Exception as e:
-                    print(f"Dosya yeniden adlandırılamadı: {os.path.basename(file_path)} -> {os.path.basename(new_file_path)}: {str(e)}")
+                    print(f"Could not rename file: {os.path.basename(file_path)} -> {os.path.basename(new_file_path)}: {str(e)}")
 
         rename_files_with_model(OUTPUT_DIR, filename_model)
 
@@ -551,11 +551,13 @@ def process_audio(
         print(f"Processing: {os.path.basename(audio_path)} | Model: {clean_model_name}")
 
         # Validate inference parameters
+        _use_yaml_chunk = (chunk_size == "yaml")
         try:
-            inference_chunk_size = int(chunk_size)
+            inference_chunk_size = 352800 if _use_yaml_chunk else int(chunk_size)
         except (TypeError, ValueError):
             print(f"Invalid chunk_size: {chunk_size}. Defaulting to: 352800.")
             inference_chunk_size = 352800
+            _use_yaml_chunk = True  # fallback: read from YAML
 
         try:
             inference_overlap = int(overlap)
@@ -598,6 +600,14 @@ def process_audio(
         
         # Get model configuration with cleaned model name (downloads if needed)
         model_type, config_path, start_check_point = get_model_config(clean_model_name, inference_chunk_size, inference_overlap)
+
+        # Read the model's native chunk_size from its YAML (now guaranteed to be downloaded)
+        native_chunk = get_model_chunk_size(clean_model_name)
+        if _use_yaml_chunk and native_chunk:
+            print(f"Using model's native chunk_size from YAML: {native_chunk}")
+            inference_chunk_size = native_chunk
+        elif not _use_yaml_chunk:
+            print(f"Using user-selected chunk_size: {inference_chunk_size}")
 
         # Iterate over the generator and yield progress updates
         outputs = None
@@ -861,6 +871,12 @@ def auto_ensemble_process(
 
             model_type, config_path, start_check_point = get_model_config(clean_model_name, auto_chunk_size, auto_overlap)
 
+            # Read the model's native chunk_size from its YAML after download
+            native_chunk = get_model_chunk_size(clean_model_name)
+            effective_chunk_size = native_chunk if native_chunk else auto_chunk_size
+            if native_chunk:
+                print(f"Using model's native chunk_size from YAML: {native_chunk} (UI value was: {auto_chunk_size})")
+
             cmd = [
                 "python", INFERENCE_PATH,
                 "--model_type", model_type,
@@ -868,7 +884,7 @@ def auto_ensemble_process(
                 "--start_check_point", start_check_point,
                 "--input_folder", INPUT_DIR,
                 "--store_dir", model_output_dir,
-                "--chunk_size", str(auto_chunk_size),
+                "--chunk_size", str(effective_chunk_size),
                 "--overlap", str(auto_overlap),
                 "--export_format", f"{export_format.split()[0].lower()} FLOAT"
             ]
@@ -900,8 +916,8 @@ def auto_ensemble_process(
                         dl_info = line_stripped.replace("[SESA_DOWNLOAD]", "")
                         if dl_info.startswith("START:"):
                             downloading_file = dl_info.replace("START:", "")
-                            yield None, f"İndiriliyor: {downloading_file}", update_progress_html(
-                                f"Model indiriliyor: {downloading_file}",
+                            yield None, i18n("downloading_model_file").format(downloading_file), update_progress_html(
+                                i18n("downloading_model_file").format(downloading_file),
                                 i * model_progress_per_step,
                                 download_info={"filename": downloading_file, "percent": 0}
                             )
@@ -912,8 +928,8 @@ def auto_ensemble_process(
                             if len(parts) == 2:
                                 filename, percent_str = parts
                                 download_percent = int(percent_str)
-                                yield None, f"İndiriliyor: {filename} - %{download_percent}", update_progress_html(
-                                    f"Model indiriliyor: {filename}",
+                                yield None, i18n("downloading_file_progress").format(filename, download_percent), update_progress_html(
+                                    i18n("downloading_model_file").format(filename),
                                     i * model_progress_per_step,
                                     download_info={"filename": filename, "percent": download_percent}
                                 )
