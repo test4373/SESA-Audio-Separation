@@ -188,14 +188,14 @@ def demix_pytorch_optimized(
 
 def run_folder_pytorch_optimized(backend, args, config, device, model=None, verbose: bool = False):
     """
-    ULTRA-OPTIMIZED PyTorch backend ile klasör işleme.
+    PyTorch backend ile klasör işleme.
     """
     start_time = time.time()
     
     mixture_paths = sorted(glob.glob(os.path.join(args.input_folder, '*.*')))
     sample_rate = getattr(config.audio, 'sample_rate', 44100)
     
-    print(f"🔥 PyTorch Backend | {len(mixture_paths)} dosya | SR: {sample_rate}")
+    print(f"PyTorch Backend | {len(mixture_paths)} dosya | SR: {sample_rate}")
     
     instruments = prefer_target_instrument(config)[:]
     
@@ -276,9 +276,9 @@ def run_folder_pytorch_optimized(backend, args, config, device, model=None, verb
 
 def proc_folder_pytorch_optimized(args):
     """
-    ULTRA-OPTIMIZED PyTorch ile inference işleme fonksiyonu.
+    PyTorch ile inference işleme fonksiyonu.
     """
-    parser = argparse.ArgumentParser(description="ULTRA-OPTIMIZED PyTorch Inference for Music Source Separation")
+    parser = argparse.ArgumentParser(description="PyTorch Inference for Music Source Separation")
     parser.add_argument("--model_type", type=str, default='mdx23c', help="Model type")
     parser.add_argument("--config_path", type=str, help="Config path")
     parser.add_argument("--start_check_point", type=str, default='', help="Checkpoint path (.ckpt)")
@@ -328,30 +328,25 @@ def proc_folder_pytorch_optimized(args):
             checkpoint = torch.load(args.start_check_point, map_location=device, weights_only=False)
         except (pickle.UnpicklingError, RuntimeError, EOFError) as e:
             error_details = f"""
-╔══════════════════════════════════════════════════════════════════════════════╗
-║                         CHECKPOINT FILE CORRUPTED                            ║
-╚══════════════════════════════════════════════════════════════════════════════╝
+CHECKPOINT FILE CORRUPTED
 
-⚠️  Error: {str(e)}
+Error: {str(e)}
 
-❌ The checkpoint file appears to be corrupted or was not downloaded correctly.
-   File: {args.start_check_point}
+The checkpoint file appears to be corrupted or was not downloaded correctly.
+File: {args.start_check_point}
 
 Common causes:
-  • File is an HTML page (wrong download URL, e.g., HuggingFace /blob/ instead of /resolve/)
-  • Incomplete or interrupted download
-  • Network issues during download
-  • File system corruption
+  - File is an HTML page (wrong download URL, e.g., HuggingFace /blob/ instead of /resolve/)
+  - Incomplete or interrupted download
+  - Network issues during download
+  - File system corruption
 
-🔧 Solution:
+Solution:
   1. Delete the corrupted checkpoint file:
      {args.start_check_point}
-  
   2. Re-run the application - it will automatically re-download the model
-  
   3. If the problem persists, check that your model URL uses /resolve/ not /blob/
      Example: https://huggingface.co/user/repo/resolve/main/model.ckpt
-
 """
             print(error_details)
             import sys
