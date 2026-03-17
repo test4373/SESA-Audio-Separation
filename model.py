@@ -292,11 +292,12 @@ def get_yaml_error_context(content, line_num, column=None):
 
 
 def conf_edit(config_path, chunk_size, overlap, model_name=None):
-    """Edits the configuration file with chunk size and overlap.
+    """Edits the configuration file overlap and training flags.
+    The model's native audio.chunk_size from the YAML is preserved unchanged.
     
     Args:
         config_path: Path to the config file
-        chunk_size: Audio chunk size for processing
+        chunk_size: Unused – kept for API compatibility (native YAML value is used instead)
         overlap: Overlap between chunks
         model_name: Optional model name for re-downloading config on error
     """
@@ -388,10 +389,10 @@ Suggested fixes:
                 data['training'] = {}
             data['training']['use_amp'] = True
 
+        # Do NOT overwrite audio.chunk_size — keep the model's native value from the YAML.
         if 'audio' not in data:
             data['audio'] = {}
-        data['audio']['chunk_size'] = chunk_size
-        
+
         if 'inference' not in data:
             data['inference'] = {}
         data['inference']['num_overlap'] = overlap
@@ -1854,3 +1855,26 @@ def get_all_model_configs_with_custom():
     return all_configs
 
 get_model_config.keys = lambda: {model_name for category in MODEL_CONFIGS.values() for model_name in category.keys()}.union(load_custom_models().keys())
+
+
+def get_model_chunk_size(model_name):
+    """Read the native chunk_size from a model's local YAML config if already downloaded.
+    
+    Returns the int chunk_size on success, or None if the config is unavailable or
+    doesn't contain an audio.chunk_size entry.
+    """
+    all_models = get_all_model_configs_with_custom()
+    for category in all_models.values():
+        if model_name in category:
+            config_path = category[model_name].get('config_path', '')
+            if config_path and os.path.exists(config_path):
+                try:
+                    with open(config_path, 'r', encoding='utf-8') as f:
+                        data = yaml.safe_load(f)
+                    if isinstance(data, dict):
+                        chunk_size = data.get('audio', {}).get('chunk_size')
+                        if chunk_size:
+                            return int(chunk_size)
+                except Exception:
+                    pass
+    return None
