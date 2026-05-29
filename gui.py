@@ -103,8 +103,6 @@ def create_interface():
         font-size: 3rem;
         font-weight: 900;
         text-shadow: 0 0 10px rgba(255, 64, 64, 0.5);
-        z-index: 1500;
-        animation: text-glow 2s infinite;
     }
     .header-subtitle {
         text-align: center;
@@ -120,13 +118,16 @@ def create_interface():
         margin: 0 5px !important;
         color: #C0C0C0 !important;
         border: 1px solid #ff4040 !important;
-        z-index: 1500;
         transition: background 0.3s ease, color 0.3s ease;
         padding: 10px 20px !important;
         font-size: 1.1rem !important;
     }
+    .gr-tab-nav {
+        flex-wrap: nowrap !important;
+        overflow-x: auto !important;
+    }
     button {
-        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+        transition: background 0.2s ease, color 0.2s ease !important;
         background: #800000 !important;
         border: 1px solid #ff4040 !important;
         color: #C0C0C0 !important;
@@ -135,8 +136,7 @@ def create_interface():
         box-shadow: 0 2px 10px rgba(255, 64, 64, 0.3);
     }
     button:hover {
-        transform: scale(1.05) !important;
-        box-shadow: 0 10px 40px rgba(255, 64, 64, 0.7) !important;
+        box-shadow: 0 4px 20px rgba(255, 64, 64, 0.5) !important;
         background: #ff4040 !important;
     }
     .compact-upload.horizontal {
@@ -169,15 +169,8 @@ def create_interface():
         background: linear-gradient(90deg, #6e8efb, #a855f7, #ff4040);
         background-size: 200% 100%;
         border-radius: 5px;
-        transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        transition: width 0.4s ease;
         max-width: 100% !important;
-    }
-    @keyframes progress-shimmer {
-        0% { background-position: 200% 0; }
-        100% { background-position: -200% 0; }
-    }
-    #progress-bar[data-active="true"] {
-        animation: progress-shimmer 2s linear infinite;
     }
     .gr-accordion {
         background: rgba(128, 0, 0, 0.5) !important;
@@ -200,10 +193,16 @@ def create_interface():
         padding: 10px;
         border-radius: 8px;
     }
-    @keyframes text-glow {
-        0% { text-shadow: 0 0 5px rgba(192, 192, 192, 0); }
-        50% { text-shadow: 0 0 15px rgba(192, 192, 192, 1); }
-        100% { text-shadow: 0 0 5px rgba(192, 192, 192, 0); }
+    /* Fix Colab iframe tab switching freeze */
+    .gradio-container .gr-tabs > .tab-nav {
+        will-change: auto !important;
+    }
+    .gradio-container .gr-tabs .gr-tab-panel {
+        contain: layout style !important;
+    }
+    /* Ensure tabs don't create layout thrash */
+    .gradio-container [role="tabpanel"] {
+        contain: layout style !important;
     }
     """
 
